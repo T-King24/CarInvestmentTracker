@@ -1,32 +1,64 @@
 from __future__ import annotations
 
+from datetime import date
 import random
+from urllib.parse import urlencode
 
 from car_investment_tracker.models import Listing
 from car_investment_tracker.services.cache import cache
 
 SOURCES = [
-    "Autotrader",
-    "eBay Motors",
-    "Cars & Bids",
-    "Bring a Trailer",
+    "Auto Trader UK",
+    "Motors.co.uk",
+    "eBay Motors UK",
     "PistonHeads",
 ]
 
 DAMAGED_TITLE_PROBABILITY = 0.17
 
-SOURCE_CURRENCIES = {
-    "Autotrader": ["USD"],
-    "Cars & Bids": ["USD"],
-    "Bring a Trailer": ["USD"],
-    "eBay Motors": ["USD", "GBP", "EUR"],
-    "PistonHeads": ["USD", "GBP", "EUR"],
+BRAND_PRICE_MULTIPLIERS = {
+    "aston martin": 1.65,
+    "audi": 1.2,
+    "bmw": 1.25,
+    "jaguar": 1.15,
+    "land rover": 1.45,
+    "mercedes": 1.3,
+    "porsche": 1.55,
 }
 
+MODEL_FACTOR_BASE = 0.9
+MODEL_FACTOR_BUCKETS = 25
+MODEL_FACTOR_STEP = 0.01
+CURRENT_YEAR = date.today().year
 
-def _price_to_usd(value: float, currency: str) -> float:
-    rates = {"USD": 1.0, "GBP": 1.28, "EUR": 1.1}
-    return round(value * rates.get(currency, 1.0), 2)
+
+def _build_source_url(source: str, brand: str, model: str, year: int, listing_index: int) -> str:
+    query = f"{brand} {model} {year}"
+    source_urls: dict[str, str] = {
+        "Auto Trader UK": "https://www.autotrader.co.uk/car-search?"
+        + urlencode({"make": brand, "model": model, "year-from": year, "page": listing_index}),
+        "Motors.co.uk": "https://www.motors.co.uk/car-search/?"
+        + urlencode({"q": query, "page": listing_index}),
+        "eBay Motors UK": "https://www.ebay.co.uk/sch/i.html?"
+        + urlencode({"_nkw": query, "_pgn": listing_index}),
+        "PistonHeads": "https://www.pistonheads.com/buy/search?"
+        + urlencode({"q": query, "page": listing_index}),
+    }
+    return source_urls[source]
+
+
+def _estimate_market_price_gbp(brand: str, model: str, year: int, rng: random.Random) -> float:
+    normalized_year = min(year, CURRENT_YEAR)
+    age = CURRENT_YEAR - normalized_year
+    depreciation_base = max(2800.0, 38000.0 - (age * 900.0))
+    brand_factor = BRAND_PRICE_MULTIPLIERS.get(brand.lower(), 1.0)
+    # Keep pricing variation deterministic for the same model while retaining believable spread.
+    model_factor = MODEL_FACTOR_BASE + (
+        (sum(ord(char) for char in model.lower()) % MODEL_FACTOR_BUCKETS)
+        * MODEL_FACTOR_STEP
+    )
+    random_factor = rng.uniform(0.84, 1.16)
+    return round(depreciation_base * brand_factor * model_factor * random_factor, 2)
 
 
 @cache.cached
@@ -37,19 +69,18 @@ def get_current_listings(brand: str, model: str, year: int) -> list[Listing]:
     listings: list[Listing] = []
     for idx in range(30):
         source = SOURCES[idx % len(SOURCES)]
-        currency = rng.choice(SOURCE_CURRENCIES[source])
-        raw_price = rng.uniform(7000, 55000)
+        currency = "GBP"
+        raw_price = _estimate_market_price_gbp(brand, model, year, rng)
         title_status = rng.random() > DAMAGED_TITLE_PROBABILITY
-        price = _price_to_usd(raw_price, currency)
 
         listings.append(
             Listing(
                 source=source,
                 title=f"{year} {brand} {model} Listing #{idx + 1}",
-                price=price,
-                currency="USD",
+                price=raw_price,
+                currency=currency,
                 clean_title=title_status,
-                url=f"https://example.com/{source.lower().replace(' ', '-')}/{brand.lower()}-{model.lower()}-{idx + 1}",
+                url=_build_source_url(source, brand, model, year, idx + 1),
             )
         )
 

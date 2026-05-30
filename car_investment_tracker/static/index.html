@@ -44,7 +44,7 @@
         <h2>Undervalued Listings</h2>
         <table>
           <thead>
-            <tr><th>Source</th><th>Title</th><th>Price (USD)</th><th>Link</th></tr>
+            <tr><th>Source</th><th>Title</th><th>Price (GBP)</th><th>Link</th></tr>
           </thead>
           <tbody id="listingRows"></tbody>
         </table>
@@ -71,7 +71,7 @@
         document.getElementById('sentiment').textContent = `Sentiment Score: ${latestPayload.sentiment.score}/5 (${latestPayload.sentiment.mentions_analyzed} mentions)`;
 
         const rows = latestPayload.undervalued_listings.map(item =>
-          `<tr><td>${item.source}</td><td>${item.title}</td><td>$${item.price.toLocaleString()}</td><td><a href="${item.url}" target="_blank" rel="noopener">Open</a></td></tr>`
+          `<tr><td>${item.source}</td><td>${item.title}</td><td>${formatPrice(item.price, item.currency)}</td><td><a href="${item.url}" target="_blank" rel="noopener">Open</a></td></tr>`
         );
         document.getElementById('listingRows').innerHTML = rows.join('') || '<tr><td colspan="4">No undervalued listings found.</td></tr>';
 
@@ -94,6 +94,11 @@
       }
 
       document.getElementById('analyze').addEventListener('click', runAnalysis);
+
+      function formatPrice(price, currency) {
+        return Number(price).toLocaleString('en-GB', { style: 'currency', currency });
+      }
+
       document.getElementById('download').addEventListener('click', () => {
         if (!latestPayload) return;
         const blob = new Blob([JSON.stringify(latestPayload, null, 2)], { type: 'application/json' });
