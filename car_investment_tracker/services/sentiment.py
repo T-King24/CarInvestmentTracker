@@ -23,5 +23,6 @@ def get_sentiment_score(brand: str, model: str, year: int) -> dict[str, float | 
         score += len(words & POSITIVE_TERMS)
         score -= len(words & NEGATIVE_TERMS)
 
+    # Maps sentiment range [-6, 6] onto [0, 5].
     normalized = max(0.0, min(5.0, round(((score + 6) / 12) * 5, 2)))
     return {"score": normalized, "mentions_analyzed": len(sample_mentions)}

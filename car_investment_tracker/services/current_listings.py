@@ -13,6 +13,16 @@ SOURCES = [
     "PistonHeads",
 ]
 
+DAMAGED_TITLE_PROBABILITY = 0.17
+
+SOURCE_CURRENCIES = {
+    "Autotrader": ["USD"],
+    "Cars & Bids": ["USD"],
+    "Bring a Trailer": ["USD"],
+    "eBay Motors": ["USD", "GBP", "EUR"],
+    "PistonHeads": ["USD", "GBP", "EUR"],
+}
+
 
 def _price_to_usd(value: float, currency: str) -> float:
     rates = {"USD": 1.0, "GBP": 1.28, "EUR": 1.1}
@@ -27,9 +37,9 @@ def get_current_listings(brand: str, model: str, year: int) -> list[Listing]:
     listings: list[Listing] = []
     for idx in range(30):
         source = SOURCES[idx % len(SOURCES)]
-        currency = "USD" if source in {"Autotrader", "Cars & Bids", "Bring a Trailer"} else rng.choice(["USD", "GBP", "EUR"])
+        currency = rng.choice(SOURCE_CURRENCIES[source])
         raw_price = rng.uniform(7000, 55000)
-        title_status = rng.random() > 0.17
+        title_status = rng.random() > DAMAGED_TITLE_PROBABILITY
         price = _price_to_usd(raw_price, currency)
 
         listings.append(

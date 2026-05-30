@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from car_investment_tracker.constants import MIN_PRICE_FLOOR_USD
 from car_investment_tracker.models import PredictionPoint
+
+NEUTRAL_SENTIMENT = 2.5
+SENTIMENT_IMPACT_DIVISOR = 20
+HISTORICAL_WEIGHT = 0.6
+LISTING_WEIGHT = 0.4
 
 
 def _linear_regression(xs: list[float], ys: list[float]) -> tuple[float, float]:
@@ -29,12 +35,12 @@ def predict_prices(
     history_years = list(range(current_year - len(historical_prices) + 1, current_year + 1))
 
     slope, intercept = _linear_regression([float(y) for y in history_years], historical_prices)
-    sentiment_modifier = 1 + ((sentiment_score - 2.5) / 20)
+    sentiment_modifier = 1 + ((sentiment_score - NEUTRAL_SENTIMENT) / SENTIMENT_IMPACT_DIVISOR)
 
     points: list[PredictionPoint] = []
     for year in range(current_year + 1, current_year + horizon_years + 1):
         baseline = slope * year + intercept
-        blended = (baseline * 0.6 + listing_avg * 0.4) * sentiment_modifier
-        points.append(PredictionPoint(year=year, predicted_price=round(max(2500.0, blended), 2)))
+        blended = (baseline * HISTORICAL_WEIGHT + listing_avg * LISTING_WEIGHT) * sentiment_modifier
+        points.append(PredictionPoint(year=year, predicted_price=round(max(MIN_PRICE_FLOOR_USD, blended), 2)))
 
     return points

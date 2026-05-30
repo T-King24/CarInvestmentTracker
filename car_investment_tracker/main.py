@@ -96,6 +96,8 @@ def analysis(
         listings = get_current_listings(brand, model, year)
         sentiment = get_sentiment_score(brand, model, year)
         undervalued = find_undervalued_listings(listings)
+        if not historical or not listings:
+            raise HTTPException(status_code=404, detail="Insufficient data for analysis")
         listing_avg = sum(item.price for item in listings) / len(listings)
         forecast = predict_prices(
             historical_prices=[point.average_price for point in historical],
@@ -104,7 +106,7 @@ def analysis(
         )
     except Exception as exc:  # pragma: no cover
         logger.exception("Analysis failed for %s %s %s", brand, model, year)
-        raise HTTPException(status_code=500, detail="Unable to complete analysis") from exc
+        raise HTTPException(status_code=500, detail="Unable to complete analysis: processing_error") from exc
 
     return {
         "query": {"brand": brand, "model": model, "year": year},
