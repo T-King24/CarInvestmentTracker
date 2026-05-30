@@ -96,6 +96,7 @@
           </thead>
           <tbody id="listingRows"></tbody>
         </table>
+        <div id="tooltip" style="display: none; position: absolute; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem; color: var(--text); z-index: 1000; max-width: 300px; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);"></div>
       </div>
     </div>
 
@@ -118,14 +119,47 @@
         latestPayload = await response.json();
         document.getElementById('sentiment').textContent = `Sentiment Score: ${latestPayload.sentiment.score}/5 (${latestPayload.sentiment.mentions_analyzed} mentions)`;
 
+        const tooltip = document.getElementById('tooltip');
         const rows = latestPayload.undervalued_listings.map(item =>
-          `<tr><td>${item.source}</td><td>${item.title}</td><td>${formatPrice(item.price, item.currency)}</td><td><a href="${item.url}" target="_blank" rel="noopener noreferrer" aria-label="View ${item.title} on ${item.source}">View details</a></td></tr>`
+          `<tr class="listing-row" data-source="${item.source}" data-title="${item.title}" data-price="${item.price}" data-currency="${item.currency}" data-url="${item.url}" data-clean-title="${item.clean_title}"><td>${item.source}</td><td>${item.title}</td><td>${formatPrice(item.price, item.currency)}</td><td><a href="${item.url}" target="_blank" rel="noopener noreferrer" aria-label="View ${item.title} on ${item.source}">View details</a></td></tr>`
         );
         document.getElementById('listingRows').innerHTML = rows.join('') || '<tr><td colspan="4">No undervalued listings found.</td></tr>';
+
+        // Add hover listeners for tooltips
+        document.querySelectorAll('.listing-row').forEach(row => {
+          row.addEventListener('mouseenter', (e) => {
+            const source = e.currentTarget.dataset.source;
+            const title = e.currentTarget.dataset.title;
+            const price = parseFloat(e.currentTarget.dataset.price);
+            const currency = e.currentTarget.dataset.currency;
+            const url = e.currentTarget.dataset.url;
+            const cleanTitle = e.currentTarget.dataset.cleanTitle === 'true' ? 'Yes' : 'No';
+
+            tooltip.innerHTML = `
+              <strong>${title}</strong><br/>
+              <span style="color: #97a3b5;">Source:</span> ${source}<br/>
+              <span style="color: #97a3b5;">Price:</span> ${formatPrice(price, currency)}<br/>
+              <span style="color: #97a3b5;">Clean Title:</span> ${cleanTitle}<br/>
+              <span style="color: #97a3b5;">URL:</span> <a href="${url}" target="_blank" style="color: #7eb8ff; word-break: break-all;">Open</a>
+            `;
+            tooltip.style.display = 'block';
+            tooltip.style.left = (e.clientX + 10) + 'px';
+            tooltip.style.top = (e.clientY + 10) + 'px';
+          });
+          row.addEventListener('mouseleave', () => {
+            tooltip.style.display = 'none';
+          });
+          row.addEventListener('mousemove', (e) => {
+            tooltip.style.left = (e.clientX + 10) + 'px';
+            tooltip.style.top = (e.clientY + 10) + 'px';
+          });
+        });
 
         const historicalPoints = latestPayload.historical_prices || [];
         const predictionPoints = latestPayload.prediction || [];
         const chartCurrency = latestPayload.undervalued_listings?.[0]?.currency || 'GBP';
+        const currentListingAverage = latestPayload.current_listing_average;
+        
         const labels = [...historicalPoints.map(p => p.year), ...predictionPoints.map(p => p.year)];
         const historicalSeries = [
           ...historicalPoints.map(p => p.average_price),
@@ -137,6 +171,9 @@
           historicalPoints.length ? historicalPoints[historicalPoints.length - 1].average_price : null,
           ...predictionPoints.map(p => p.predicted_price)
         ];
+
+        // Create average line data (horizontal line at current listing average)
+        const averageSeries = new Array(labels.length).fill(currentListingAverage);
 
         if (chart) chart.destroy();
         chart = new Chart(document.getElementById('trendChart'), {
@@ -164,6 +201,16 @@
                 borderDash: [8, 6],
                 borderWidth: 2.5,
                 spanGaps: true
+              },
+              {
+                label: 'Current Average',
+                data: averageSeries,
+                borderColor: '#10b981',
+                borderWidth: 2,
+                borderDash: [4, 4],
+                pointRadius: 0,
+                fill: false,
+                tension: 0
               }
             ]
           },
