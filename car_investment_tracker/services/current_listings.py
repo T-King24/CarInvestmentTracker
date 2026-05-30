@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date
 import random
 from urllib.parse import urlencode
 
@@ -26,6 +26,11 @@ BRAND_PRICE_MULTIPLIERS = {
     "porsche": 1.55,
 }
 
+MODEL_FACTOR_BASE = 0.9
+MODEL_FACTOR_BUCKETS = 25
+MODEL_FACTOR_STEP = 0.01
+CURRENT_YEAR = date.today().year
+
 
 def _build_source_url(source: str, brand: str, model: str, year: int, listing_index: int) -> str:
     query = f"{brand} {model} {year}"
@@ -43,11 +48,15 @@ def _build_source_url(source: str, brand: str, model: str, year: int, listing_in
 
 
 def _estimate_market_price_gbp(brand: str, model: str, year: int, rng: random.Random) -> float:
-    current_year = datetime.now().year
-    age = max(current_year - year, 0)
+    normalized_year = min(year, CURRENT_YEAR)
+    age = CURRENT_YEAR - normalized_year
     depreciation_base = max(2800.0, 38000.0 - (age * 900.0))
     brand_factor = BRAND_PRICE_MULTIPLIERS.get(brand.lower(), 1.0)
-    model_factor = 0.9 + ((sum(ord(char) for char in model.lower()) % 25) / 100)
+    # Keep pricing variation deterministic for the same model while retaining believable spread.
+    model_factor = MODEL_FACTOR_BASE + (
+        (sum(ord(char) for char in model.lower()) % MODEL_FACTOR_BUCKETS)
+        * MODEL_FACTOR_STEP
+    )
     random_factor = rng.uniform(0.84, 1.16)
     return round(depreciation_base * brand_factor * model_factor * random_factor, 2)
 

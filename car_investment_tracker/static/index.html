@@ -44,7 +44,7 @@
         <h2>Undervalued Listings</h2>
         <table>
           <thead>
-            <tr><th>Source</th><th>Title</th><th>Price</th><th>Link</th></tr>
+            <tr><th>Source</th><th>Title</th><th>Price (GBP)</th><th>Link</th></tr>
           </thead>
           <tbody id="listingRows"></tbody>
         </table>
@@ -96,9 +96,7 @@
       document.getElementById('analyze').addEventListener('click', runAnalysis);
 
       function formatPrice(price, currency) {
-        const symbols = { GBP: '£', USD: '$', EUR: '€' };
-        const symbol = symbols[currency] || '';
-        return `${symbol}${Number(price).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${currency}`;
+        return Number(price).toLocaleString('en-GB', { style: 'currency', currency });
       }
 
       document.getElementById('download').addEventListener('click', () => {
