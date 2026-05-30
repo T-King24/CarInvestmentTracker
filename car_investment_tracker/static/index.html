@@ -6,24 +6,72 @@
     <title>Investment Car Tracker</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-      body { font-family: Arial, sans-serif; margin: 0; background: #f5f7fb; color: #1d2636; }
-      .container { max-width: 1100px; margin: auto; padding: 1.2rem; }
-      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; }
-      .card { background: white; border-radius: 10px; padding: 1rem; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
-      input, button { width: 100%; padding: 0.65rem; margin-top: 0.35rem; border: 1px solid #c6d0e0; border-radius: 8px; }
-      button { background: #2149d8; color: #fff; border: none; cursor: pointer; }
+      :root {
+        --bg: #0f1216;
+        --panel: #171c23;
+        --panel-highlight: #1f2631;
+        --text: #e9edf2;
+        --muted: #97a3b5;
+        --accent: #f59e0b;
+        --accent-hover: #fbbf24;
+        --border: #283140;
+      }
+      * { box-sizing: border-box; }
+      body {
+        font-family: "Inter", "Segoe UI", Arial, sans-serif;
+        margin: 0;
+        background: radial-gradient(circle at top, #171d26 0%, #0f1216 55%);
+        color: var(--text);
+      }
+      .container { max-width: 1120px; margin: 0 auto; padding: 2rem 1rem 2.5rem; }
+      .topbar { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+      h1 { margin: 0; letter-spacing: 0.01em; }
+      .small { color: var(--muted); font-size: 0.95rem; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.8rem; }
+      .card {
+        background: linear-gradient(180deg, var(--panel-highlight), var(--panel));
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 1rem;
+        box-shadow: 0 8px 22px rgba(0, 0, 0, 0.25);
+      }
+      label { font-weight: 600; font-size: 0.9rem; color: #d7dde7; }
+      input, button {
+        width: 100%;
+        padding: 0.7rem 0.75rem;
+        margin-top: 0.45rem;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: #11151b;
+        color: var(--text);
+      }
+      button {
+        background: var(--accent);
+        color: #151311;
+        font-weight: 700;
+        border: none;
+        cursor: pointer;
+        transition: background 0.2s ease;
+      }
+      button:hover { background: var(--accent-hover); }
+      .actions { display: flex; gap: 0.7rem; flex-wrap: wrap; margin-top: 0.8rem; }
+      .actions button { min-width: 180px; }
       table { width: 100%; border-collapse: collapse; }
-      th, td { border-bottom: 1px solid #e5e7eb; text-align: left; padding: 0.6rem; }
-      .actions { display: flex; gap: 0.7rem; flex-wrap: wrap; margin-top: 0.6rem; }
-      .small { color: #4b5563; font-size: 0.9rem; }
-      a { color: #2149d8; }
+      th, td { border-bottom: 1px solid #2d3748; text-align: left; padding: 0.7rem 0.6rem; vertical-align: top; }
+      th { color: #c2ccda; font-size: 0.86rem; text-transform: uppercase; letter-spacing: 0.05em; }
+      a { color: #7eb8ff; }
+      .kpi { color: #d8dee7; font-size: 0.92rem; margin-top: 0.6rem; }
       canvas { width: 100% !important; height: 300px !important; }
     </style>
   </head>
   <body>
     <div class="container">
-      <h1>Investment Car Tracker</h1>
-      <p class="small">Analyze 20-year trends, forecast value, sentiment (0-5), and undervalued listings.</p>
+      <div class="topbar">
+        <div>
+          <h1>Investment Car Tracker</h1>
+          <p class="small">Track 20-year value movement, forecast future pricing, and spot undervalued listings.</p>
+        </div>
+      </div>
 
       <div class="card">
         <div class="grid">
@@ -35,7 +83,7 @@
           <button id="analyze">Run Analysis</button>
           <button id="download" type="button">Download JSON</button>
         </div>
-        <p id="sentiment" class="small"></p>
+        <p id="sentiment" class="kpi"></p>
       </div>
 
       <div class="card"><canvas id="trendChart" aria-label="Historical and predicted prices"></canvas></div>
@@ -71,13 +119,24 @@
         document.getElementById('sentiment').textContent = `Sentiment Score: ${latestPayload.sentiment.score}/5 (${latestPayload.sentiment.mentions_analyzed} mentions)`;
 
         const rows = latestPayload.undervalued_listings.map(item =>
-          `<tr><td>${item.source}</td><td>${item.title}</td><td>${formatPrice(item.price, item.currency)}</td><td><a href="${item.url}" target="_blank" rel="noopener">Open</a></td></tr>`
+          `<tr><td>${item.source}</td><td>${item.title}</td><td>${formatPrice(item.price, item.currency)}</td><td><a href="${item.url}" target="_blank" rel="noopener noreferrer" aria-label="View ${item.title} on ${item.source}">View details</a></td></tr>`
         );
         document.getElementById('listingRows').innerHTML = rows.join('') || '<tr><td colspan="4">No undervalued listings found.</td></tr>';
 
-        const labels = [...latestPayload.historical_prices.map(p => p.year), ...latestPayload.prediction.map(p => p.year)];
-        const hist = latestPayload.historical_prices.map(p => p.average_price);
-        const pred = new Array(hist.length).fill(null).concat(latestPayload.prediction.map(p => p.predicted_price));
+        const historicalPoints = latestPayload.historical_prices || [];
+        const predictionPoints = latestPayload.prediction || [];
+        const chartCurrency = latestPayload.undervalued_listings?.[0]?.currency || 'GBP';
+        const labels = [...historicalPoints.map(p => p.year), ...predictionPoints.map(p => p.year)];
+        const historicalSeries = [
+          ...historicalPoints.map(p => p.average_price),
+          ...new Array(predictionPoints.length).fill(null)
+        ];
+        const overlapOffset = Math.max(historicalPoints.length - 1, 0);
+        const predictionSeries = [
+          ...new Array(overlapOffset).fill(null),
+          historicalPoints.length ? historicalPoints[historicalPoints.length - 1].average_price : null,
+          ...predictionPoints.map(p => p.predicted_price)
+        ];
 
         if (chart) chart.destroy();
         chart = new Chart(document.getElementById('trendChart'), {
@@ -85,11 +144,52 @@
           data: {
             labels,
             datasets: [
-              { label: 'Historical', data: hist, borderColor: '#2149d8', tension: 0.25 },
-              { label: 'Predicted', data: pred, borderColor: '#0f9d58', tension: 0.25 }
+              {
+                label: 'Historical',
+                data: historicalSeries,
+                borderColor: '#76a8ff',
+                backgroundColor: 'rgba(118, 168, 255, 0.25)',
+                tension: 0.22,
+                pointRadius: 0,
+                borderWidth: 2.5,
+                spanGaps: true
+              },
+              {
+                label: 'Predicted',
+                data: predictionSeries,
+                borderColor: '#f59e0b',
+                backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                tension: 0.2,
+                pointRadius: 0,
+                borderDash: [8, 6],
+                borderWidth: 2.5,
+                spanGaps: true
+              }
             ]
           },
-          options: { responsive: true, maintainAspectRatio: false }
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { labels: { color: '#dce3ee' } },
+              tooltip: {
+                callbacks: {
+                  label: (context) => `${context.dataset.label}: ${formatPrice(context.parsed.y || 0, chartCurrency)}`
+                }
+              }
+            },
+            scales: {
+              x: { ticks: { color: '#b8c2d3' }, grid: { color: 'rgba(154, 167, 186, 0.12)' } },
+              y: {
+                ticks: {
+                  color: '#b8c2d3',
+                  callback: value => formatPrice(value, chartCurrency)
+                },
+                grid: { color: 'rgba(154, 167, 186, 0.12)' }
+              }
+            }
+          }
         });
       }
 
