@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Investment Car Tracker</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 0; background: #f5f7fb; color: #1d2636; }
+      .container { max-width: 1100px; margin: auto; padding: 1.2rem; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; }
+      .card { background: white; border-radius: 10px; padding: 1rem; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+      input, button { width: 100%; padding: 0.65rem; margin-top: 0.35rem; border: 1px solid #c6d0e0; border-radius: 8px; }
+      button { background: #2149d8; color: #fff; border: none; cursor: pointer; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border-bottom: 1px solid #e5e7eb; text-align: left; padding: 0.6rem; }
+      .actions { display: flex; gap: 0.7rem; flex-wrap: wrap; margin-top: 0.6rem; }
+      .small { color: #4b5563; font-size: 0.9rem; }
+      a { color: #2149d8; }
+      canvas { width: 100% !important; height: 300px !important; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Investment Car Tracker</h1>
+      <p class="small">Analyse 20-year trends, forecast value, sentiment (0-5), and undervalued listings.</p>
+
+      <div class="card">
+        <div class="grid">
+          <label>Brand <input id="brand" value="Porsche" aria-label="Brand" /></label>
+          <label>Model <input id="model" value="911" aria-label="Model" /></label>
+          <label>Year <input id="year" type="number" value="2004" aria-label="Year" /></label>
+        </div>
+        <div class="actions">
+          <button id="analyze">Run Analysis</button>
+          <button id="download" type="button">Download JSON</button>
+        </div>
+        <p id="sentiment" class="small"></p>
+      </div>
+
+      <div class="card"><canvas id="trendChart" aria-label="Historical and predicted prices"></canvas></div>
+
+      <div class="card">
+        <h2>Undervalued Listings</h2>
+        <table>
+          <thead>
+            <tr><th>Source</th><th>Title</th><th>Price (USD)</th><th>Link</th></tr>
+          </thead>
+          <tbody id="listingRows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <script>
+      let latestPayload = null;
+      let chart = null;
+
+      async function runAnalysis() {
+        const brand = document.getElementById('brand').value.trim();
+        const model = document.getElementById('model').value.trim();
+        const year = document.getElementById('year').value;
+
+        const qs = new URLSearchParams({ brand, model, year });
+        const response = await fetch(`/analysis?${qs.toString()}`);
+        if (!response.ok) {
+          alert('Failed to load analysis');
+          return;
+        }
+
+        latestPayload = await response.json();
+        document.getElementById('sentiment').textContent = `Sentiment Score: ${latestPayload.sentiment.score}/5 (${latestPayload.sentiment.mentions_analyzed} mentions)`;
+
+        const rows = latestPayload.undervalued_listings.map(item =>
+          `<tr><td>${item.source}</td><td>${item.title}</td><td>$${item.price.toLocaleString()}</td><td><a href="${item.url}" target="_blank" rel="noopener">Open</a></td></tr>`
+        );
+        document.getElementById('listingRows').innerHTML = rows.join('') || '<tr><td colspan="4">No undervalued listings found.</td></tr>';
+
+        const labels = [...latestPayload.historical_prices.map(p => p.year), ...latestPayload.prediction.map(p => p.year)];
+        const hist = latestPayload.historical_prices.map(p => p.average_price);
+        const pred = new Array(hist.length).fill(null).concat(latestPayload.prediction.map(p => p.predicted_price));
+
+        if (chart) chart.destroy();
+        chart = new Chart(document.getElementById('trendChart'), {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [
+              { label: 'Historical', data: hist, borderColor: '#2149d8', tension: 0.25 },
+              { label: 'Predicted', data: pred, borderColor: '#0f9d58', tension: 0.25 }
+            ]
+          },
+          options: { responsive: true, maintainAspectRatio: false }
+        });
+      }
+
+      document.getElementById('analyze').addEventListener('click', runAnalysis);
+      document.getElementById('download').addEventListener('click', () => {
+        if (!latestPayload) return;
+        const blob = new Blob([JSON.stringify(latestPayload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'car-investment-analysis.json';
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+
+      runAnalysis();
+    </script>
+  </body>
+</html>
