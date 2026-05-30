@@ -47,3 +47,15 @@ def test_undervalued_endpoint_handles_empty_listings(monkeypatch):
     response = client.get("/undervalued-listings", params=_query_params())
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_current_listings_use_uk_currency_and_working_links():
+    response = client.get("/current-listings", params=_query_params())
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload
+
+    for item in payload:
+        assert item["currency"] == "GBP"
+        assert item["url"].startswith("https://")
+        assert "example.com" not in item["url"]

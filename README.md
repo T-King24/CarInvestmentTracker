@@ -5,7 +5,7 @@ Production-ready starter app for evaluating vehicle investment potential using m
 ## Features
 - Vehicle input: brand, model, year
 - 20-year historical price trend generation
-- Current listing aggregation from major marketplace categories
+- Current listing aggregation from major UK marketplace categories
 - Sentiment scoring (0-5) from automotive-community-style sources
 - Price forecasting that blends historical data, listing averages, and sentiment
 - Undervalued listing detection (clean title + below average listing price)
@@ -35,7 +35,7 @@ All endpoints accept query params: `brand`, `model`, `year`.
 ## Data flow
 1. User submits vehicle input.
 2. Historical service returns 20 years of normalized historical price points.
-3. Listings service combines marketplace sources, normalizes currency to USD, and deduplicates listings.
+3. Listings service combines UK marketplace sources, returns GBP listing prices, and deduplicates listings.
 4. Sentiment service analyzes community-style mentions and maps sentiment to 0-5.
 5. Prediction service applies regression over historical prices and blends listing averages + sentiment.
 6. Evaluation service filters undervalued clean-title listings.
