@@ -63,7 +63,7 @@
       .kpi { color: #d8dee7; font-size: 0.92rem; margin-top: 0.6rem; }
       canvas { width: 100% !important; height: 300px !important; }
       #tooltip {
-        position: fixed;
+        position: absolute;
         background: var(--panel);
         border: 1px solid var(--border);
         border-radius: 8px;
@@ -152,35 +152,41 @@
           const escapedTitle = escapeHtml(item.title);
           const escapedUrl = escapeHtml(item.url);
           const escapedCurrency = escapeHtml(item.currency);
+          const price = parseFloat(item.price) || 0;
+          const cleanTitleStr = String(item.clean_title === true);
           
-          return `<tr class="listing-row" data-source="${escapedSource}" data-title="${escapedTitle}" data-price="${item.price}" data-currency="${escapedCurrency}" data-url="${escapedUrl}" data-clean-title="${item.clean_title}"><td>${escapedSource}</td><td>${escapedTitle}</td><td>${formatPrice(item.price, item.currency)}</td><td><a href="${escapedUrl}" target="_blank" rel="noopener noreferrer" aria-label="View ${escapedTitle} on ${escapedSource}">View details</a></td></tr>`;
+          return `<tr class="listing-row" data-source="${escapedSource}" data-title="${escapedTitle}" data-price="${price}" data-currency="${escapedCurrency}" data-url="${escapedUrl}" data-clean-title="${cleanTitleStr}">
+            <td>${escapedSource}</td>
+            <td>${escapedTitle}</td>
+            <td>${formatPrice(price, item.currency)}</td>
+            <td><a href="${escapedUrl}" target="_blank" rel="noopener noreferrer" aria-label="View ${escapedTitle} on ${escapedSource}">View details</a></td>
+          </tr>`;
         });
         document.getElementById('listingRows').innerHTML = rows.join('') || '<tr><td colspan="4">No undervalued listings found.</td></tr>';
 
         // Add hover listeners for tooltips
         document.querySelectorAll('.listing-row').forEach(row => {
           row.addEventListener('mouseenter', (e) => {
-            const source = e.currentTarget.dataset.source;
-            const title = e.currentTarget.dataset.title;
-            const price = parseFloat(e.currentTarget.dataset.price);
-            const currency = e.currentTarget.dataset.currency;
-            const url = e.currentTarget.dataset.url;
-            const cleanTitle = e.currentTarget.dataset.cleanTitle === 'true' ? 'Yes' : 'No';
+            const source = e.currentTarget.dataset.source || '';
+            const title = e.currentTarget.dataset.title || '';
+            const priceStr = e.currentTarget.dataset.price || '0';
+            const price = parseFloat(priceStr);
+            const currency = e.currentTarget.dataset.currency || 'GBP';
+            const url = e.currentTarget.dataset.url || '';
+            const cleanTitleStr = e.currentTarget.dataset.cleanTitle;
+            const cleanTitle = cleanTitleStr === 'true' ? 'Yes' : 'No';
 
-            // Use textContent for plain text to avoid HTML injection
-            const tooltipContent = document.createElement('div');
-            tooltipContent.innerHTML = `
+            // Create tooltip content with properly escaped HTML
+            tooltip.innerHTML = `
               <strong>${escapeHtml(title)}</strong><br/>
               <span style="color: var(--muted);">Source:</span> ${escapeHtml(source)}<br/>
-              <span style="color: var(--muted);">Price:</span> ${formatPrice(price, currency)}<br/>
+              <span style="color: var(--muted);">Price:</span> ${isNaN(price) ? 'N/A' : formatPrice(price, currency)}<br/>
               <span style="color: var(--muted);">Clean Title:</span> ${cleanTitle}<br/>
               <span style="color: var(--muted);">URL:</span> <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="color: #7eb8ff; word-break: break-all;">Open</a>
             `;
-            tooltip.innerHTML = '';
-            tooltip.appendChild(tooltipContent.firstChild);
             
             tooltip.style.display = 'block';
-            // Use pageX/pageY and account for scroll offset
+            // Use pageX/pageY for document-relative positioning
             const x = e.pageX + 10;
             const y = e.pageY + 10;
             tooltip.style.left = x + 'px';
