@@ -158,7 +158,7 @@
           return `<tr class="listing-row" data-source="${escapedSource}" data-title="${escapedTitle}" data-price="${price}" data-currency="${escapedCurrency}" data-url="${escapedUrl}" data-clean-title="${cleanTitleStr}">
             <td>${escapedSource}</td>
             <td>${escapedTitle}</td>
-            <td>${formatPrice(price, item.currency)}</td>
+            <td>${formatPrice(price, escapedCurrency)}</td>
             <td><a href="${escapedUrl}" target="_blank" rel="noopener noreferrer" aria-label="View ${escapedTitle} on ${escapedSource}">View details</a></td>
           </tr>`;
         });
