@@ -10,8 +10,11 @@ SENTIMENT_IMPACT_DIVISOR = 20
 HISTORICAL_WEIGHT = 0.6
 LISTING_WEIGHT = 0.4
 MOMENTUM_SMOOTHING = 0.3  # Fraction of trend change to apply (prevents sudden jumps)
-MAX_PRICE_MULTIPLIER = 1.35  # Max 35% increase from baseline (realistic appreciation)
-MIN_PRICE_MULTIPLIER = 0.70  # Min 30% decrease from baseline (realistic depreciation)
+# Sentiment modifier bounds: limit sentiment's impact to ±15% from neutral (0.85 to 1.15)
+# This prevents extreme predictions when sentiment scores are very high or low (0 or 5)
+# while still allowing meaningful sentiment influence on the forecast
+MAX_PRICE_MULTIPLIER = 1.35  # Max 35% increase from baseline (realistic appreciation for well-maintained vehicles)
+MIN_PRICE_MULTIPLIER = 0.70  # Min 30% decrease from baseline (realistic depreciation accounting for market conditions)
 
 
 def _linear_regression(xs: list[float], ys: list[float]) -> tuple[float, float]:

@@ -451,7 +451,7 @@
             <div class="explanation-grid">
               <div class="explanation-item">
                 <div class="explanation-item-label">📈 Forecast Model</div>
-                <div>Blends 20-year historical trend (60%) with current market prices (40%)</div>
+                <div>Blends ${(explanation.historical_weight * 100).toFixed(0)}% historical trend with ${(explanation.listing_weight * 100).toFixed(0)}% current market prices</div>
               </div>
               <div class="explanation-item">
                 <div class="explanation-item-label">💡 Market Insight</div>
@@ -475,7 +475,7 @@
               </div>
             </div>
             <p style="font-size: 0.85rem; color: var(--muted); margin-top: 0.8rem; margin-bottom: 0;">
-              <strong>💡 How to interpret:</strong> The forecast conservatively blends historical trends with current market data, adjusted for inflation and community sentiment. Momentum smoothing prevents unrealistic price jumps. Predictions within +35%/-30% bounds from baseline are most reliable.
+              <strong>💡 How to interpret:</strong> The forecast conservatively blends historical trends with current market data, adjusted for inflation and community sentiment. Momentum smoothing prevents unrealistic price jumps. Predictions within +35%/-30% realistic bounds are most reliable.
             </p>
           </div>
         `;

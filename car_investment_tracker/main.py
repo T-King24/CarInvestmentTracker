@@ -147,7 +147,7 @@ def analysis(
     data_quality = DataQualityIndicator(
         historical_data_points=historical_count,
         current_listings_count=listings_count,
-        data_consistency="Consistent (historical inflation-adjusted, predictions spike-clamped)",
+        data_consistency="Consistent: historical prices inflation-adjusted; predictions protected against unrealistic spikes via ±15% sentiment clamping and price bounds",
         confidence_level=confidence,
         notes=consistency_note,
     )
@@ -173,7 +173,7 @@ def analysis(
         },
         "methodology": {
             "forecast_model": "Linear regression with momentum smoothing",
-            "spike_prevention": "Predicted prices constrained within ±35% to ±30% of baseline to prevent unrealistic jumps",
+            "spike_prevention": "Predicted prices constrained between -30% and +35% of baseline to prevent unrealistic jumps",
             "inflation_adjustment": "All historical data converted to current year GBP for fair long-term comparison",
             "sentiment_impact": "Sentiment score (0-5) adjusted to ±15% multiplier on forecast (clamped for stability)",
         },
