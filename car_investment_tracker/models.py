@@ -31,3 +31,16 @@ class SentimentResult(BaseModel):
 class PredictionPoint(BaseModel):
     year: int
     predicted_price: float
+
+
+class PredictionExplanation(BaseModel):
+    """Detailed explanation of how the prediction was calculated."""
+    historical_weight: float = Field(description="Weight of historical trend (60%)")
+    listing_weight: float = Field(description="Weight of current market average (40%)")
+    sentiment_score: float = Field(description="Sentiment score (0-5) affecting forecast")
+    sentiment_modifier: float = Field(description="Multiplier applied based on sentiment")
+    last_historical_price: float = Field(description="Most recent historical price data")
+    current_listing_average: float = Field(description="Average of current market listings")
+    trend_momentum: float = Field(description="Recent price change momentum (noise-smoothed)")
+    model_type: str = Field(description="Forecasting approach used")
+    inflation_adjusted: bool = Field(description="Whether historical prices are inflation-adjusted")

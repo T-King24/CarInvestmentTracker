@@ -15,6 +15,8 @@
         --accent: #f59e0b;
         --accent-hover: #fbbf24;
         --border: #283140;
+        --error: #ef4444;
+        --success: #10b981;
       }
       * { box-sizing: border-box; }
       body {
@@ -54,6 +56,11 @@
         transition: background 0.2s ease;
       }
       button:hover { background: var(--accent-hover); }
+      button:disabled {
+        background: #666;
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
       .actions { display: flex; gap: 0.7rem; flex-wrap: wrap; margin-top: 0.8rem; }
       .actions button { min-width: 180px; }
       table { width: 100%; border-collapse: collapse; }
@@ -61,6 +68,35 @@
       th { color: #c2ccda; font-size: 0.86rem; text-transform: uppercase; letter-spacing: 0.05em; }
       a { color: #7eb8ff; }
       .kpi { color: #d8dee7; font-size: 0.92rem; margin-top: 0.6rem; }
+      .error-message {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid var(--error);
+        color: var(--error);
+        padding: 0.8rem;
+        border-radius: 8px;
+        margin-top: 0.8rem;
+        display: none;
+      }
+      .error-message.show { display: block; }
+      .loading-spinner {
+        display: inline-block;
+        width: 1em;
+        height: 1em;
+        border: 2px solid #ddd;
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+        margin-right: 0.5em;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      .loading-indicator {
+        display: none;
+        font-size: 0.9rem;
+        color: var(--muted);
+      }
+      .loading-indicator.active { display: block; }
       canvas { width: 100% !important; height: 300px !important; }
       #tooltip {
         position: absolute;
@@ -76,6 +112,34 @@
         pointer-events: none;
       }
       .listing-row { cursor: default; }
+      .explanation-box {
+        background: rgba(16, 185, 129, 0.1);
+        border: 1px solid var(--success);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-top: 1rem;
+        font-size: 0.9rem;
+      }
+      .explanation-box h3 {
+        margin: 0 0 0.5rem 0;
+        color: var(--success);
+      }
+      .explanation-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 0.8rem;
+        margin-top: 0.8rem;
+      }
+      .explanation-item {
+        font-size: 0.85rem;
+        padding: 0.5rem;
+        background: rgba(255, 255, 255, 0.02);
+        border-radius: 4px;
+      }
+      .explanation-item-label {
+        color: var(--muted);
+        font-weight: 600;
+      }
     </style>
   </head>
   <body>
@@ -83,7 +147,7 @@
       <div class="topbar">
         <div>
           <h1>Investment Car Tracker</h1>
-          <p class="small">Track 20-year value movement, forecast future pricing, and spot undervalued listings.</p>
+          <p class="small">Track 20-year value movement (inflation-adjusted), forecast future pricing, and spot undervalued listings.</p>
         </div>
       </div>
 
@@ -94,13 +158,17 @@
           <label>Year <input id="year" type="number" value="2004" aria-label="Year" /></label>
         </div>
         <div class="actions">
-          <button id="analyze">Run Analysis</button>
+          <button id="analyze"><span id="analyzeSpinner" class="loading-spinner" style="display: none;"></span>Run Analysis</button>
           <button id="download" type="button">Download JSON</button>
         </div>
+        <div id="errorMessage" class="error-message"></div>
+        <div id="loadingIndicator" class="loading-indicator"></div>
         <p id="sentiment" class="kpi"></p>
       </div>
 
       <div class="card"><canvas id="trendChart" aria-label="Historical and predicted prices"></canvas></div>
+
+      <div id="explanationContainer"></div>
 
       <div class="card">
         <h2>Undervalued Listings</h2>
@@ -130,162 +198,257 @@
         return String(text).replace(/[&<>"']/g, m => map[m]);
       }
 
+      function validateInputs() {
+        const brand = document.getElementById('brand').value.trim();
+        const model = document.getElementById('model').value.trim();
+        const year = document.getElementById('year').value;
+        const errorDiv = document.getElementById('errorMessage');
+
+        errorDiv.classList.remove('show');
+        errorDiv.textContent = '';
+
+        if (!brand) {
+          errorDiv.textContent = 'Please enter a valid brand.';
+          errorDiv.classList.add('show');
+          return false;
+        }
+        if (!model) {
+          errorDiv.textContent = 'Please enter a valid model.';
+          errorDiv.classList.add('show');
+          return false;
+        }
+        const yearNum = parseInt(year);
+        if (!year || yearNum < 1900 || yearNum > 2026) {
+          errorDiv.textContent = 'Please enter a year between 1900 and 2026.';
+          errorDiv.classList.add('show');
+          return false;
+        }
+        return true;
+      }
+
       async function runAnalysis() {
+        if (!validateInputs()) return;
+
         const brand = document.getElementById('brand').value.trim();
         const model = document.getElementById('model').value.trim();
         const year = document.getElementById('year').value;
 
-        const qs = new URLSearchParams({ brand, model, year });
-        const response = await fetch(`/analysis?${qs.toString()}`);
-        if (!response.ok) {
-          alert('Failed to load analysis');
+        // Show loading indicator
+        const spinner = document.getElementById('analyzeSpinner');
+        const analyzeBtn = document.getElementById('analyze');
+        const loadingDiv = document.getElementById('loadingIndicator');
+        spinner.style.display = 'inline-block';
+        analyzeBtn.disabled = true;
+        loadingDiv.classList.add('active');
+        loadingDiv.textContent = 'Loading analysis...';
+
+        try {
+          const qs = new URLSearchParams({ brand, model, year });
+          const response = await fetch(`/analysis?${qs.toString()}`);
+          if (!response.ok) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = 'Failed to load analysis. Please check your inputs and try again.';
+            errorDiv.classList.add('show');
+            return;
+          }
+
+          latestPayload = await response.json();
+          document.getElementById('sentiment').textContent = `Sentiment Score: ${latestPayload.sentiment.score}/5 (${latestPayload.sentiment.mentions_analyzed} mentions analyzed)`;
+
+          const tooltip = document.getElementById('tooltip');
+          const rows = latestPayload.undervalued_listings.map(item => {
+            const escapedSource = escapeHtml(item.source);
+            const escapedTitle = escapeHtml(item.title);
+            const escapedUrl = escapeHtml(item.url);
+            const escapedCurrency = escapeHtml(item.currency);
+            const price = parseFloat(item.price) || 0;
+            const cleanTitleStr = String(item.clean_title === true);
+            
+            return `<tr class="listing-row" data-source="${escapedSource}" data-title="${escapedTitle}" data-price="${price}" data-currency="${escapedCurrency}" data-url="${escapedUrl}" data-clean-title="${cleanTitleStr}">
+              <td>${escapedSource}</td>
+              <td>${escapedTitle}</td>
+              <td>${formatPrice(price, escapedCurrency)}</td>
+              <td><a href="${escapedUrl}" target="_blank" rel="noopener noreferrer" aria-label="View ${escapedTitle} on ${escapedSource}">View details</a></td>
+            </tr>`;
+          });
+          document.getElementById('listingRows').innerHTML = rows.join('') || '<tr><td colspan="4">No undervalued listings found.</td></tr>';
+
+          // Add hover listeners for tooltips
+          document.querySelectorAll('.listing-row').forEach(row => {
+            row.addEventListener('mouseenter', (e) => {
+              const source = e.currentTarget.dataset.source || '';
+              const title = e.currentTarget.dataset.title || '';
+              const priceStr = e.currentTarget.dataset.price || '0';
+              const price = parseFloat(priceStr);
+              const currency = e.currentTarget.dataset.currency || 'GBP';
+              const url = e.currentTarget.dataset.url || '';
+              const cleanTitleStr = e.currentTarget.dataset.cleanTitle;
+              const cleanTitle = cleanTitleStr === 'true' ? 'Yes' : 'No';
+
+              tooltip.innerHTML = `
+                <strong>${escapeHtml(title)}</strong><br/>
+                <span style="color: var(--muted);">Source:</span> ${escapeHtml(source)}<br/>
+                <span style="color: var(--muted);">Price:</span> ${isNaN(price) ? 'N/A' : formatPrice(price, escapedCurrency)}<br/>
+                <span style="color: var(--muted);">Clean Title:</span> ${cleanTitle}<br/>
+                <span style="color: var(--muted);">URL:</span> <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="color: #7eb8ff; word-break: break-all;">Open</a>
+              `;
+              
+              tooltip.style.display = 'block';
+              const x = e.pageX + 10;
+              const y = e.pageY + 10;
+              tooltip.style.left = x + 'px';
+              tooltip.style.top = y + 'px';
+            });
+            row.addEventListener('mouseleave', () => {
+              tooltip.style.display = 'none';
+            });
+            row.addEventListener('mousemove', (e) => {
+              const x = e.pageX + 10;
+              const y = e.pageY + 10;
+              tooltip.style.left = x + 'px';
+              tooltip.style.top = y + 'px';
+            });
+          });
+
+          // Display explanation
+          displayExplanation(latestPayload.prediction_explanation);
+
+          const historicalPoints = latestPayload.historical_prices || [];
+          const predictionPoints = latestPayload.prediction || [];
+          const chartCurrency = latestPayload.undervalued_listings?.[0]?.currency || 'GBP';
+          const currentListingAverage = latestPayload.current_listing_average || 0;
+          
+          const labels = [...historicalPoints.map(p => p.year), ...predictionPoints.map(p => p.year)];
+          const historicalSeries = [
+            ...historicalPoints.map(p => p.average_price),
+            ...new Array(predictionPoints.length).fill(null)
+          ];
+          const overlapOffset = Math.max(historicalPoints.length - 1, 0);
+          const predictionSeries = [
+            ...new Array(overlapOffset).fill(null),
+            historicalPoints.length ? historicalPoints[historicalPoints.length - 1].average_price : null,
+            ...predictionPoints.map(p => p.predicted_price)
+          ];
+
+          // Create average line data (horizontal line at current listing average)
+          const averageSeries = currentListingAverage > 0 ? new Array(labels.length).fill(currentListingAverage) : [];
+
+          if (chart) chart.destroy();
+          chart = new Chart(document.getElementById('trendChart'), {
+            type: 'line',
+            data: {
+              labels,
+              datasets: [
+                {
+                  label: 'Historical (Inflation-Adjusted)',
+                  data: historicalSeries,
+                  borderColor: '#76a8ff',
+                  backgroundColor: 'rgba(118, 168, 255, 0.25)',
+                  tension: 0.22,
+                  pointRadius: 0,
+                  borderWidth: 2.5,
+                  spanGaps: true
+                },
+                {
+                  label: 'Predicted (Momentum-Smoothed)',
+                  data: predictionSeries,
+                  borderColor: '#f59e0b',
+                  backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                  tension: 0.2,
+                  pointRadius: 0,
+                  borderDash: [8, 6],
+                  borderWidth: 2.5,
+                  spanGaps: true
+                },
+                ...(currentListingAverage > 0 ? [{
+                  label: 'Current Market Average (Baseline)',
+                  data: averageSeries,
+                  borderColor: '#10b981',
+                  borderWidth: 2,
+                  borderDash: [4, 4],
+                  pointRadius: 0,
+                  fill: false,
+                  tension: 0
+                }] : [])
+              ]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              interaction: { mode: 'index', intersect: false },
+              plugins: {
+                legend: { labels: { color: '#dce3ee' } },
+                tooltip: {
+                  callbacks: {
+                    label: (context) => `${context.dataset.label}: ${formatPrice(context.parsed.y || 0, chartCurrency)}`
+                  }
+                }
+              },
+              scales: {
+                x: { ticks: { color: '#b8c2d3' }, grid: { color: 'rgba(154, 167, 186, 0.12)' } },
+                y: {
+                  ticks: {
+                    color: '#b8c2d3',
+                    callback: value => formatPrice(value, chartCurrency)
+                  },
+                  grid: { color: 'rgba(154, 167, 186, 0.12)' }
+                }
+              }
+            }
+          });
+        } catch (error) {
+          const errorDiv = document.getElementById('errorMessage');
+          errorDiv.textContent = 'An unexpected error occurred. Please try again.';
+          errorDiv.classList.add('show');
+        } finally {
+          spinner.style.display = 'none';
+          analyzeBtn.disabled = false;
+          loadingDiv.classList.remove('active');
+        }
+      }
+
+      function displayExplanation(explanation) {
+        const container = document.getElementById('explanationContainer');
+        if (!explanation) {
+          container.innerHTML = '';
           return;
         }
 
-        latestPayload = await response.json();
-        document.getElementById('sentiment').textContent = `Sentiment Score: ${latestPayload.sentiment.score}/5 (${latestPayload.sentiment.mentions_analyzed} mentions)`;
-
-        const tooltip = document.getElementById('tooltip');
-        const rows = latestPayload.undervalued_listings.map(item => {
-          // Escape all user-provided data for HTML attributes
-          const escapedSource = escapeHtml(item.source);
-          const escapedTitle = escapeHtml(item.title);
-          const escapedUrl = escapeHtml(item.url);
-          const escapedCurrency = escapeHtml(item.currency);
-          const price = parseFloat(item.price) || 0;
-          const cleanTitleStr = String(item.clean_title === true);
-          
-          return `<tr class="listing-row" data-source="${escapedSource}" data-title="${escapedTitle}" data-price="${price}" data-currency="${escapedCurrency}" data-url="${escapedUrl}" data-clean-title="${cleanTitleStr}">
-            <td>${escapedSource}</td>
-            <td>${escapedTitle}</td>
-            <td>${formatPrice(price, escapedCurrency)}</td>
-            <td><a href="${escapedUrl}" target="_blank" rel="noopener noreferrer" aria-label="View ${escapedTitle} on ${escapedSource}">View details</a></td>
-          </tr>`;
-        });
-        document.getElementById('listingRows').innerHTML = rows.join('') || '<tr><td colspan="4">No undervalued listings found.</td></tr>';
-
-        // Add hover listeners for tooltips
-        document.querySelectorAll('.listing-row').forEach(row => {
-          row.addEventListener('mouseenter', (e) => {
-            const source = e.currentTarget.dataset.source || '';
-            const title = e.currentTarget.dataset.title || '';
-            const priceStr = e.currentTarget.dataset.price || '0';
-            const price = parseFloat(priceStr);
-            const currency = e.currentTarget.dataset.currency || 'GBP';
-            const url = e.currentTarget.dataset.url || '';
-            const cleanTitleStr = e.currentTarget.dataset.cleanTitle;
-            const cleanTitle = cleanTitleStr === 'true' ? 'Yes' : 'No';
-
-            // Create tooltip content with properly escaped HTML
-            tooltip.innerHTML = `
-              <strong>${escapeHtml(title)}</strong><br/>
-              <span style="color: var(--muted);">Source:</span> ${escapeHtml(source)}<br/>
-              <span style="color: var(--muted);">Price:</span> ${isNaN(price) ? 'N/A' : formatPrice(price, escapedCurrency)}<br/>
-              <span style="color: var(--muted);">Clean Title:</span> ${cleanTitle}<br/>
-              <span style="color: var(--muted);">URL:</span> <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="color: #7eb8ff; word-break: break-all;">Open</a>
-            `;
-            
-            tooltip.style.display = 'block';
-            // Use pageX/pageY for document-relative positioning
-            const x = e.pageX + 10;
-            const y = e.pageY + 10;
-            tooltip.style.left = x + 'px';
-            tooltip.style.top = y + 'px';
-          });
-          row.addEventListener('mouseleave', () => {
-            tooltip.style.display = 'none';
-          });
-          row.addEventListener('mousemove', (e) => {
-            const x = e.pageX + 10;
-            const y = e.pageY + 10;
-            tooltip.style.left = x + 'px';
-            tooltip.style.top = y + 'px';
-          });
-        });
-
-        const historicalPoints = latestPayload.historical_prices || [];
-        const predictionPoints = latestPayload.prediction || [];
-        const chartCurrency = latestPayload.undervalued_listings?.[0]?.currency || 'GBP';
-        const currentListingAverage = latestPayload.current_listing_average || 0;
-        
-        const labels = [...historicalPoints.map(p => p.year), ...predictionPoints.map(p => p.year)];
-        const historicalSeries = [
-          ...historicalPoints.map(p => p.average_price),
-          ...new Array(predictionPoints.length).fill(null)
-        ];
-        const overlapOffset = Math.max(historicalPoints.length - 1, 0);
-        const predictionSeries = [
-          ...new Array(overlapOffset).fill(null),
-          historicalPoints.length ? historicalPoints[historicalPoints.length - 1].average_price : null,
-          ...predictionPoints.map(p => p.predicted_price)
-        ];
-
-        // Create average line data (horizontal line at current listing average)
-        const averageSeries = currentListingAverage > 0 ? new Array(labels.length).fill(currentListingAverage) : [];
-
-        if (chart) chart.destroy();
-        chart = new Chart(document.getElementById('trendChart'), {
-          type: 'line',
-          data: {
-            labels,
-            datasets: [
-              {
-                label: 'Historical',
-                data: historicalSeries,
-                borderColor: '#76a8ff',
-                backgroundColor: 'rgba(118, 168, 255, 0.25)',
-                tension: 0.22,
-                pointRadius: 0,
-                borderWidth: 2.5,
-                spanGaps: true
-              },
-              {
-                label: 'Predicted',
-                data: predictionSeries,
-                borderColor: '#f59e0b',
-                backgroundColor: 'rgba(245, 158, 11, 0.2)',
-                tension: 0.2,
-                pointRadius: 0,
-                borderDash: [8, 6],
-                borderWidth: 2.5,
-                spanGaps: true
-              },
-              ...(currentListingAverage > 0 ? [{
-                label: 'Current Average',
-                data: averageSeries,
-                borderColor: '#10b981',
-                borderWidth: 2,
-                borderDash: [4, 4],
-                pointRadius: 0,
-                fill: false,
-                tension: 0
-              }] : [])
-            ]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            plugins: {
-              legend: { labels: { color: '#dce3ee' } },
-              tooltip: {
-                callbacks: {
-                  label: (context) => `${context.dataset.label}: ${formatPrice(context.parsed.y || 0, chartCurrency)}`
-                }
-              }
-            },
-            scales: {
-              x: { ticks: { color: '#b8c2d3' }, grid: { color: 'rgba(154, 167, 186, 0.12)' } },
-              y: {
-                ticks: {
-                  color: '#b8c2d3',
-                  callback: value => formatPrice(value, chartCurrency)
-                },
-                grid: { color: 'rgba(154, 167, 186, 0.12)' }
-              }
-            }
-          }
-        });
+        container.innerHTML = `
+          <div class="card explanation-box">
+            <h3>📊 Model Transparency</h3>
+            <div class="explanation-grid">
+              <div class="explanation-item">
+                <div class="explanation-item-label">Forecast Model</div>
+                <div>${escapeHtml(explanation.model_type)}</div>
+              </div>
+              <div class="explanation-item">
+                <div class="explanation-item-label">Historical Weight</div>
+                <div>${(explanation.historical_weight * 100).toFixed(0)}% (trend-based)</div>
+              </div>
+              <div class="explanation-item">
+                <div class="explanation-item-label">Market Weight</div>
+                <div>${(explanation.listing_weight * 100).toFixed(0)}% (current listings)</div>
+              </div>
+              <div class="explanation-item">
+                <div class="explanation-item-label">Sentiment Modifier</div>
+                <div>${explanation.sentiment_modifier.toFixed(4)}x (score: ${explanation.sentiment_score.toFixed(2)}/5)</div>
+              </div>
+              <div class="explanation-item">
+                <div class="explanation-item-label">Momentum (Recent)</div>
+                <div>${explanation.trend_momentum.toFixed(2)} (year-over-year change)</div>
+              </div>
+              <div class="explanation-item">
+                <div class="explanation-item-label">Data Adjustment</div>
+                <div>${explanation.inflation_adjusted ? '✓ Inflation-adjusted' : 'Nominal prices'}</div>
+              </div>
+            </div>
+            <p style="font-size: 0.85rem; color: var(--muted); margin-top: 0.8rem; margin-bottom: 0;">
+              <strong>How it works:</strong> The forecast blends historical price trends with current market listings and community sentiment.
+              Momentum smoothing prevents unrealistic price jumps. All historical data is adjusted for inflation to ensure fair long-term comparisons.
+            </p>
+          </div>
+        `;
       }
 
       document.getElementById('analyze').addEventListener('click', runAnalysis);
@@ -295,7 +458,10 @@
       }
 
       document.getElementById('download').addEventListener('click', () => {
-        if (!latestPayload) return;
+        if (!latestPayload) {
+          alert('Please run an analysis first.');
+          return;
+        }
         const blob = new Blob([JSON.stringify(latestPayload, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
