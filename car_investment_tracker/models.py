@@ -12,6 +12,8 @@ class VehicleQuery(BaseModel):
 class PricePoint(BaseModel):
     year: int
     average_price: float
+    nominal_price: float = Field(default=None, description="Nominal (non-adjusted) price")
+    inflation_adjusted_price: float = Field(default=None, description="Inflation-adjusted price")
 
 
 class Listing(BaseModel):
@@ -26,6 +28,20 @@ class Listing(BaseModel):
 class SentimentResult(BaseModel):
     score: float = Field(ge=0, le=5)
     mentions_analyzed: int
+
+
+class SentimentSourceBreakdown(BaseModel):
+    """Breakdown of sentiment sources with weights."""
+    forums_score: float = Field(ge=0, le=5, description="Sentiment from forums and communities")
+    forums_mentions: int = Field(description="Number of forum mentions")
+    auction_score: float = Field(ge=0, le=5, description="Sentiment from auction commentary")
+    auction_mentions: int = Field(description="Number of auction comments")
+    news_score: float = Field(ge=0, le=5, description="Sentiment from news articles")
+    news_mentions: int = Field(description="Number of news mentions")
+    social_score: float = Field(ge=0, le=5, description="Sentiment from social media")
+    social_mentions: int = Field(description="Number of social media mentions")
+    overall_score: float = Field(ge=0, le=5, description="Weighted overall sentiment score")
+    total_mentions: int = Field(description="Total mentions across all sources")
 
 
 class PredictionPoint(BaseModel):

@@ -16,6 +16,8 @@ from car_investment_tracker.services.market_metrics import calculate_volatility_
 from car_investment_tracker.services.market_comparables import get_market_comparables
 from car_investment_tracker.services.ownership_costs import calculate_ownership_costs
 from car_investment_tracker.services.spec_adjustments import calculate_spec_adjustments, adjust_prices_for_specs
+from car_investment_tracker.services.market_events import get_market_events
+from car_investment_tracker.services.sentiment_sources import get_sentiment_source_breakdown
 from car_investment_tracker.models import DataQualityIndicator
 
 logger = logging.getLogger(__name__)
@@ -47,9 +49,16 @@ def historical_prices(
     brand: str = Query(min_length=1),
     model: str = Query(min_length=1),
     year: int = Query(ge=1900),
+    inflation_adjusted: bool = Query(default=True, description="Return inflation-adjusted prices (default) or nominal"),
 ):
     _validate_vehicle_params(brand, model, year)
-    return get_historical_prices(brand, model, year)
+    prices = get_historical_prices(brand, model, year)
+    
+    if not inflation_adjusted:
+        # Return nominal prices instead
+        return [{"year": p.year, "average_price": p.nominal_price} for p in prices]
+    
+    return prices
 
 
 @app.get("/current-listings")
@@ -70,6 +79,17 @@ def sentiment_score(
 ):
     _validate_vehicle_params(brand, model, year)
     return get_sentiment_score(brand, model, year)
+
+
+@app.get("/sentiment-sources")
+def sentiment_sources(
+    brand: str = Query(min_length=1),
+    model: str = Query(min_length=1),
+    year: int = Query(ge=1900),
+):
+    """Get detailed sentiment breakdown by source (forums, auctions, news, social media)."""
+    _validate_vehicle_params(brand, model, year)
+    return get_sentiment_source_breakdown(brand, model, year)
 
 
 @app.get("/prediction")
@@ -156,6 +176,25 @@ def market_comparables(
     }
 
 
+@app.get("/market-events")
+def market_events(
+    brand: str = Query(min_length=1),
+    model: str = Query(min_length=1),
+    year: int = Query(ge=1900),
+):
+    """Get major market events affecting vehicle valuations."""
+    _validate_vehicle_params(brand, model, year)
+    start_year = 2026 - 20
+    end_year = 2026
+    events = get_market_events(brand, model, start_year, end_year)
+    
+    return {
+        "events": events,
+        "query": {"brand": brand, "model": model, "year": year},
+        "time_range": {"start": start_year, "end": end_year},
+    }
+
+
 @app.get("/ownership-costs")
 def ownership_costs(
     brand: str = Query(min_length=1),
@@ -196,6 +235,7 @@ def analysis(
     condition: str = Query(default="Average"),
     mileage_bracket: str = Query(default="Normal"),
     vehicle_price: float = Query(default=None),
+    inflation_adjusted: bool = Query(default=True),
 ):
     _validate_vehicle_params(brand, model, year)
     try:
@@ -207,9 +247,15 @@ def analysis(
         if not historical or not listings:
             raise HTTPException(status_code=404, detail="Insufficient data for analysis")
         
+        # Select price data based on inflation_adjusted flag
+        if inflation_adjusted:
+            historical_prices = [point.average_price for point in historical]
+        else:
+            historical_prices = [point.nominal_price for point in historical]
+        
         # Apply spec adjustments
         adjusted_historical = adjust_prices_for_specs(
-            [point.average_price for point in historical],
+            historical_prices,
             transmission=transmission,
             trim_level=trim_level,
             condition=condition,
@@ -228,6 +274,13 @@ def analysis(
         
         # Get market comparables
         comparables_data = get_market_comparables(brand, model, year)
+        
+        # Get market events
+        start_year = 2026 - 20
+        events = get_market_events(brand, model, start_year, 2026)
+        
+        # Get sentiment source breakdown
+        sentiment_breakdown = get_sentiment_source_breakdown(brand, model, year)
         
         # Calculate ownership costs if price provided
         ownership = None
@@ -282,6 +335,7 @@ def analysis(
             "price_trend": "Estimated based on historical data with sentiment adjustment",
         },
         "sentiment": sentiment,
+        "sentiment_breakdown": sentiment_breakdown,
         "historical_prices": historical,
         "prediction": forecast,
         "prediction_explanation": explanation,
@@ -289,6 +343,7 @@ def analysis(
         "undervalued_listings": undervalued,
         "volatility_metrics": volatility,
         "market_comparables": comparables_data,
+        "market_events": events,
         "spec_adjustments": spec_adjustments_info,
         "ownership_costs": ownership,
         "data_quality": data_quality,
@@ -304,5 +359,8 @@ def analysis(
             "sentiment_impact": "Sentiment score (0-5) adjusted to ±15% multiplier on forecast (clamped for stability)",
             "confidence_intervals": "±10% bands around predictions to show forecast uncertainty",
             "spec_adjustments": "Prices adjusted for transmission, trim level, condition, and mileage bracket",
+            "volatility_tracking": "Coefficient of variation and volatility score (1-10) indicate market stability",
+            "event_markers": "Major market events annotated to explain price movements",
+            "sentiment_sources": "Weighted sentiment from forums (30%), auctions (35%), news (20%), and social media (15%)",
         },
     }
