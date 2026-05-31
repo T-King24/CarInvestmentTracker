@@ -86,10 +86,18 @@ def get_historical_prices(brand: str, model: str, year: int) -> list[PricePoint]
         growth = collector_bump - trend_penalty + market_noise
         price = max(MIN_PRICE_FLOOR_USD, price * (1 + growth))
         
+        # Store nominal price (not adjusted)
+        nominal_price = price
+        
         # Adjust price for inflation: show what nominal price was in current year terms
         inflation_factor = _inflation_adjustment(yr, current_year)
         inflation_adjusted_price = price * inflation_factor
         
-        data.append(PricePoint(year=yr, average_price=round(inflation_adjusted_price, 2)))
+        data.append(PricePoint(
+            year=yr, 
+            average_price=round(inflation_adjusted_price, 2),
+            nominal_price=round(nominal_price, 2),
+            inflation_adjusted_price=round(inflation_adjusted_price, 2),
+        ))
 
     return data

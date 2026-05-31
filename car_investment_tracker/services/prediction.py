@@ -66,6 +66,9 @@ def predict_prices(
     # Use a blend of historical and market average as baseline for bounding predictions
     baseline_reference = last_historical_price * HISTORICAL_WEIGHT + listing_avg * LISTING_WEIGHT
     
+    # Calculate confidence interval (±10%)
+    CI_MARGIN = 0.10
+    
     for year in range(current_year + 1, current_year + horizon_years + 1):
         # Use smoothed slope for more realistic forecasting
         baseline = smoothed_slope * year + intercept
@@ -74,7 +77,17 @@ def predict_prices(
         min_bound = baseline_reference * MIN_PRICE_MULTIPLIER
         max_bound = baseline_reference * MAX_PRICE_MULTIPLIER
         predicted = max(MIN_PRICE_FLOOR_USD, min(max_bound, max(min_bound, blended)))
-        points.append(PredictionPoint(year=year, predicted_price=round(predicted, 2)))
+        
+        # Calculate confidence intervals
+        lower_ci = predicted * (1 - CI_MARGIN)
+        upper_ci = predicted * (1 + CI_MARGIN)
+        
+        points.append(PredictionPoint(
+            year=year, 
+            predicted_price=round(predicted, 2),
+            lower_bound=round(lower_ci, 2),
+            upper_bound=round(upper_ci, 2)
+        ))
 
     explanation = PredictionExplanation(
         historical_weight=HISTORICAL_WEIGHT,
