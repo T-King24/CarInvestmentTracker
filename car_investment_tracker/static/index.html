@@ -313,6 +313,36 @@
           // Display explanation
           displayExplanation(latestPayload.prediction_explanation);
 
+          // Display data quality feedback
+          const qualityDiv = document.createElement('div');
+          qualityDiv.className = 'card';
+          qualityDiv.style.marginTop = '1rem';
+          const confidenceColor = getConfidenceColor(latestPayload.summary.prediction_confidence);
+          qualityDiv.innerHTML = `
+            <h3>📊 Data Quality Assessment</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.8rem;">
+              <div>
+                <div style="color: var(--muted); font-size: 0.9rem; font-weight: 600;">Historical Data Points</div>
+                <div style="font-size: 1.1rem; margin-top: 0.3rem;">${latestPayload.data_quality.historical_data_points}</div>
+              </div>
+              <div>
+                <div style="color: var(--muted); font-size: 0.9rem; font-weight: 600;">Current Listings Analyzed</div>
+                <div style="font-size: 1.1rem; margin-top: 0.3rem;">${latestPayload.data_quality.current_listings_count} listings</div>
+              </div>
+              <div>
+                <div style="color: var(--muted); font-size: 0.9rem; font-weight: 600;">Prediction Confidence</div>
+                <div style="font-size: 1.1rem; margin-top: 0.3rem; color: ${confidenceColor};">${latestPayload.summary.prediction_confidence}</div>
+              </div>
+            </div>
+            <p style="font-size: 0.85rem; color: var(--muted); margin-top: 0.8rem; margin-bottom: 0;">${latestPayload.data_quality.notes}</p>
+          `;
+          const explanationContainer = document.getElementById('explanationContainer');
+          if (explanationContainer.nextSibling) {
+            explanationContainer.parentNode.insertBefore(qualityDiv, explanationContainer.nextSibling);
+          } else {
+            explanationContainer.parentNode.appendChild(qualityDiv);
+          }
+
           const historicalPoints = latestPayload.historical_prices || [];
           const predictionPoints = latestPayload.prediction || [];
           const chartCurrency = latestPayload.undervalued_listings?.[0]?.currency || 'GBP';
@@ -361,14 +391,15 @@
                   spanGaps: true
                 },
                 ...(currentListingAverage > 0 ? [{
-                  label: 'Current Market Average (Baseline)',
+                  label: 'Current Market Average (Baseline for Comparison)',
                   data: averageSeries,
                   borderColor: '#10b981',
-                  borderWidth: 2,
-                  borderDash: [4, 4],
+                  borderWidth: 3,
+                  borderDash: [5, 5],
                   pointRadius: 0,
                   fill: false,
-                  tension: 0
+                  tension: 0,
+                  order: 0  // Draw baseline behind other lines
                 }] : [])
               ]
             },
@@ -416,36 +447,35 @@
 
         container.innerHTML = `
           <div class="card explanation-box">
-            <h3>📊 Model Transparency</h3>
+            <h3>📊 Forecast Explained</h3>
             <div class="explanation-grid">
               <div class="explanation-item">
-                <div class="explanation-item-label">Forecast Model</div>
-                <div>${escapeHtml(explanation.model_type)}</div>
+                <div class="explanation-item-label">📈 Forecast Model</div>
+                <div>Blends ${(explanation.historical_weight * 100).toFixed(0)}% historical trend with ${(explanation.listing_weight * 100).toFixed(0)}% current market prices</div>
               </div>
               <div class="explanation-item">
-                <div class="explanation-item-label">Historical Weight</div>
-                <div>${(explanation.historical_weight * 100).toFixed(0)}% (trend-based)</div>
+                <div class="explanation-item-label">💡 Market Insight</div>
+                <div>${getSentimentPercentageText(explanation.sentiment_modifier)}</div>
               </div>
               <div class="explanation-item">
-                <div class="explanation-item-label">Market Weight</div>
-                <div>${(explanation.listing_weight * 100).toFixed(0)}% (current listings)</div>
+                <div class="explanation-item-label">📉 Recent Trend</div>
+                <div>${getMomentumText(explanation.trend_momentum)}</div>
               </div>
               <div class="explanation-item">
-                <div class="explanation-item-label">Sentiment Modifier</div>
-                <div>${explanation.sentiment_modifier.toFixed(4)}x (score: ${explanation.sentiment_score.toFixed(2)}/5)</div>
+                <div class="explanation-item-label">🔍 Baseline Price</div>
+                <div>${formatPrice(explanation.last_historical_price, 'GBP')}</div>
               </div>
               <div class="explanation-item">
-                <div class="explanation-item-label">Momentum (Recent)</div>
-                <div>${explanation.trend_momentum.toFixed(2)} (year-over-year change)</div>
+                <div class="explanation-item-label">💰 Market Average</div>
+                <div>${formatPrice(explanation.current_listing_average, 'GBP')}</div>
               </div>
               <div class="explanation-item">
-                <div class="explanation-item-label">Data Adjustment</div>
-                <div>${explanation.inflation_adjusted ? '✓ Inflation-adjusted' : 'Nominal prices'}</div>
+                <div class="explanation-item-label">✓ Data Quality</div>
+                <div>${explanation.inflation_adjusted ? 'Inflation-adjusted (comparable across decades)' : 'Nominal prices'}</div>
               </div>
             </div>
             <p style="font-size: 0.85rem; color: var(--muted); margin-top: 0.8rem; margin-bottom: 0;">
-              <strong>How it works:</strong> The forecast blends historical price trends with current market listings and community sentiment.
-              Momentum smoothing prevents unrealistic price jumps. All historical data is adjusted for inflation to ensure fair long-term comparisons.
+              <strong>💡 How to interpret:</strong> The forecast conservatively blends historical trends with current market data, adjusted for inflation and community sentiment. Momentum smoothing prevents unrealistic price jumps. Predictions within +35%/-30% realistic bounds are most reliable.
             </p>
           </div>
         `;
@@ -457,16 +487,123 @@
         return Number(price).toLocaleString('en-GB', { style: 'currency', currency });
       }
 
+      function getSentimentPercentageText(modifier) {
+        if (modifier < 0.95) {
+          return `Bearish sentiment: Forecast adjusted down by ${(100 - modifier * 100).toFixed(0)}%`;
+        } else if (modifier > 1.05) {
+          return `Bullish sentiment: Forecast adjusted up by ${(modifier * 100 - 100).toFixed(0)}%`;
+        } else {
+          return `Neutral sentiment: Forecast remains near trend baseline`;
+        }
+      }
+
+      function getMomentumText(momentum) {
+        if (momentum > 500) {
+          return `Strong upward momentum (prices rising ~£${momentum.toFixed(0)}/year)`;
+        } else if (momentum > 0) {
+          return `Modest upward momentum (prices rising ~£${momentum.toFixed(0)}/year)`;
+        } else if (momentum < -500) {
+          return `Strong downward momentum (prices falling ~£${Math.abs(momentum).toFixed(0)}/year)`;
+        } else if (momentum < 0) {
+          return `Modest downward momentum (prices falling ~£${Math.abs(momentum).toFixed(0)}/year)`;
+        } else {
+          return `Stable momentum (prices relatively flat)`;
+        }
+      }
+
+      function getConfidenceColor(confidence) {
+        if (confidence === 'High') return '#10b981';
+        if (confidence === 'Medium') return '#f59e0b';
+        return '#ef4444';
+      }
+
       document.getElementById('download').addEventListener('click', () => {
         if (!latestPayload) {
           alert('Please run an analysis first.');
           return;
         }
-        const blob = new Blob([JSON.stringify(latestPayload, null, 2)], { type: 'application/json' });
+        
+        // Create user-friendly export with summary at top
+        const exportData = {
+          // ===== EXECUTIVE SUMMARY =====
+          summary: {
+            vehicle: `${latestPayload.query.brand} ${latestPayload.query.model} (${latestPayload.query.year})`,
+            current_market_price: `${formatPrice(latestPayload.current_listing_average, 'GBP')} (average listing)`,
+            sentiment_score: `${latestPayload.sentiment.score}/5 (${latestPayload.sentiment.mentions_analyzed} community mentions analyzed)`,
+            forecast_confidence: latestPayload.summary.prediction_confidence,
+            price_trend_summary: latestPayload.summary.price_trend,
+            data_quality: latestPayload.data_quality.notes,
+          },
+          
+          // ===== FORECAST =====
+          forecast_5_year: {
+            predictions: latestPayload.prediction.map(p => ({
+              year: p.year,
+              predicted_price: p.predicted_price,
+              currency: 'GBP'
+            })),
+            last_historical_price: latestPayload.prediction_explanation.last_historical_price,
+            currency: 'GBP'
+          },
+          
+          // ===== METHODOLOGY =====
+          how_forecast_was_calculated: latestPayload.methodology,
+          
+          // ===== MARKET DATA =====
+          market_analysis: {
+            historical_prices_20_years: latestPayload.historical_prices.map(p => ({
+              year: p.year,
+              average_price: p.average_price,
+              currency: 'GBP',
+              adjustment_type: 'inflation-adjusted'
+            })),
+            current_listings_summary: {
+              average_price: latestPayload.current_listing_average,
+              listings_analyzed: latestPayload.data_quality.current_listings_count,
+              currency: 'GBP',
+              adjustment_type: 'nominal (current prices)'
+            },
+            undervalued_opportunities: latestPayload.undervalued_listings.length > 0 
+              ? latestPayload.undervalued_listings.map(l => ({
+                  title: l.title,
+                  price: l.price,
+                  currency: l.currency,
+                  source: l.source,
+                  clean_title: l.clean_title,
+                  url: l.url
+                }))
+              : 'No undervalued listings found'
+          },
+          
+          // ===== DATA QUALITY =====
+          data_quality_assessment: {
+            historical_data_points: latestPayload.data_quality.historical_data_points,
+            current_listings_count: latestPayload.data_quality.current_listings_count,
+            data_consistency: latestPayload.data_quality.data_consistency,
+            confidence_level: latestPayload.data_quality.confidence_level,
+            notes: latestPayload.data_quality.notes
+          },
+          
+          // ===== DATA SOURCES =====
+          data_sources: latestPayload.data_sources,
+          
+          // ===== DETAILED EXPLANATION =====
+          detailed_forecast_parameters: latestPayload.prediction_explanation,
+          
+          // ===== RAW DATA (for power users) =====
+          raw_data: {
+            sentiment: latestPayload.sentiment,
+            historical_prices: latestPayload.historical_prices,
+            prediction: latestPayload.prediction,
+            query: latestPayload.query
+          }
+        };
+        
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'car-investment-analysis.json';
+        a.download = `car-investment-analysis-${latestPayload.query.brand}-${latestPayload.query.model}-${latestPayload.query.year}.json`;
         a.click();
         URL.revokeObjectURL(url);
       });

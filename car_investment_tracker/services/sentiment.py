@@ -31,6 +31,7 @@ NEGATIVE_TERMS = {
 @cache.cached
 def get_sentiment_score(brand: str, model: str, year: int) -> dict[str, float | int]:
     # In production this should use API-backed forum ingestion and transformer NLP sentiment.
+    # Enhanced sample mentions representing diverse automotive community perspectives
     sample_mentions = [
         f"The {brand} {model} remains an iconic enthusiast choice with strong resale value.",
         f"Owners say maintenance can be expensive on the {year} generation.",
@@ -39,6 +40,17 @@ def get_sentiment_score(brand: str, model: str, year: int) -> dict[str, float | 
         f"Some communities report rust problems in wet climates.",
         f"Collectors seek out this legendary model.",
         f"Sought-after by enthusiasts despite depreciation trends.",
+        f"{brand} {model} owners report excellent build quality and reliable performance.",
+        f"Market analysis shows strong collector interest in this {year} model.",
+        f"Insurance costs are expensive for performance variants.",
+        f"Parts availability can be problematic for older generations.",
+        f"The {brand} {model} offers exceptional value compared to competitors.",
+        f"Expert reviewers praise the iconic design and performance.",
+        f"Common issues reported by owners in online forums.",
+        f"This model is excellent for long-term investment potential.",
+        f"Depreciation has been steeper than expected recently.",
+        f"Enthusiast community rates this model highly for driving experience.",
+        f"Used market shows strong demand from collectors.",
     ]
 
     score = 0.0

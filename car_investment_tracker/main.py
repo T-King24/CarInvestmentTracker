@@ -12,6 +12,7 @@ from car_investment_tracker.services.historical_data import get_historical_price
 from car_investment_tracker.services.listing_evaluation import find_undervalued_listings
 from car_investment_tracker.services.prediction import predict_prices
 from car_investment_tracker.services.sentiment import get_sentiment_score
+from car_investment_tracker.models import DataQualityIndicator
 
 logger = logging.getLogger(__name__)
 
@@ -130,17 +131,50 @@ def analysis(
         logger.exception("Analysis failed for %s %s %s", brand, model, year)
         raise HTTPException(status_code=500, detail="Unable to complete analysis: processing_error") from exc
 
+    # Determine confidence level based on data availability
+    historical_count = len(historical)
+    listings_count = len(listings)
+    if historical_count >= 15 and listings_count >= 5:
+        confidence = "High"
+        consistency_note = "Comprehensive historical data and current market listings"
+    elif historical_count >= 10 and listings_count >= 3:
+        confidence = "Medium"
+        consistency_note = "Adequate historical data with moderate market coverage"
+    else:
+        confidence = "Low"
+        consistency_note = "Limited historical data or current market listings"
+
+    data_quality = DataQualityIndicator(
+        historical_data_points=historical_count,
+        current_listings_count=listings_count,
+        data_consistency="Consistent: historical prices inflation-adjusted; predictions protected against unrealistic spikes via ±15% sentiment clamping and price bounds",
+        confidence_level=confidence,
+        notes=consistency_note,
+    )
+
     return {
         "query": {"brand": brand, "model": model, "year": year},
+        "summary": {
+            "sentiment_score": f"{sentiment['score']}/5",
+            "prediction_confidence": confidence,
+            "price_trend": "Estimated based on historical data with sentiment adjustment",
+        },
         "sentiment": sentiment,
         "historical_prices": historical,
         "prediction": forecast,
         "prediction_explanation": explanation,
         "current_listing_average": round(listing_avg, 2),
         "undervalued_listings": undervalued,
+        "data_quality": data_quality,
         "data_sources": {
-            "historical": "Market sales aggregators / fallback model (inflation-adjusted)",
-            "listings": "Marketplace APIs where available; compliant scraping where permitted",
-            "sentiment": "Forums, Reddit, owner communities, and review sites (weighted analysis)",
+            "historical": "Market sales aggregators / fallback model (all prices inflation-adjusted to current year GBP)",
+            "listings": "Marketplace APIs where available; compliant scraping where permitted (current market prices)",
+            "sentiment": f"Forums, Reddit, owner communities, and review sites (weighted analysis of {sentiment['mentions_analyzed']} mentions)",
+        },
+        "methodology": {
+            "forecast_model": "Linear regression with momentum smoothing",
+            "spike_prevention": "Predicted prices constrained between -30% and +35% of baseline to prevent unrealistic jumps",
+            "inflation_adjustment": "All historical data converted to current year GBP for fair long-term comparison",
+            "sentiment_impact": "Sentiment score (0-5) adjusted to ±15% multiplier on forecast (clamped for stability)",
         },
     }

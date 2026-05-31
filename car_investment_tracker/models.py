@@ -44,3 +44,12 @@ class PredictionExplanation(BaseModel):
     trend_momentum: float = Field(description="Recent price change momentum (noise-smoothed)")
     model_type: str = Field(description="Forecasting approach used")
     inflation_adjusted: bool = Field(description="Whether historical prices are inflation-adjusted")
+
+
+class DataQualityIndicator(BaseModel):
+    """Assessment of data quality and prediction confidence."""
+    historical_data_points: int = Field(description="Number of historical data points available")
+    current_listings_count: int = Field(description="Number of current listings analyzed")
+    data_consistency: str = Field(description="Overall data consistency assessment")
+    confidence_level: str = Field(description="Low, Medium, or High confidence in prediction")
+    notes: str = Field(description="Human-readable notes about data quality")
