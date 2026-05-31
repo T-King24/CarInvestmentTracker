@@ -386,7 +386,7 @@ def anomalies(
             sentiment_score=float(sentiment["score"]),
         )
         if forecast:
-            market_price = forecast[0].average_price if forecast else None
+            market_price = forecast[0].predicted_price if forecast else None
     
     anomalies = detect_listing_anomalies(listings, market_price=market_price)
     

@@ -52,8 +52,8 @@ def export_to_csv(
     writer.writerow(["Historical Prices (Last 20 Years)"])
     writer.writerow(["Year", "Price"])
     for point in historical_prices:
-        year_val = point.get("year", point.get("year", ""))
-        price = point.get("average_price", point.get("average_price", ""))
+        year_val = point.get("year", "")
+        price = point.get("average_price", "")
         writer.writerow([year_val, f"${price:,.2f}"])
     writer.writerow([])
     
