@@ -21,6 +21,17 @@ static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
+def _validate_vehicle_params(brand: str, model: str, year: int) -> None:
+    """Validate vehicle input parameters."""
+    if not brand or not brand.strip():
+        raise HTTPException(status_code=400, detail="Brand cannot be empty")
+    if not model or not model.strip():
+        raise HTTPException(status_code=400, detail="Model cannot be empty")
+    current_year = 2026  # Approximate current year
+    if year < 1900 or year > current_year:
+        raise HTTPException(status_code=400, detail=f"Year must be between 1900 and {current_year}")
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(static_dir / "index.html")
@@ -32,6 +43,7 @@ def historical_prices(
     model: str = Query(min_length=1),
     year: int = Query(ge=1900),
 ):
+    _validate_vehicle_params(brand, model, year)
     return get_historical_prices(brand, model, year)
 
 
@@ -41,6 +53,7 @@ def current_listings(
     model: str = Query(min_length=1),
     year: int = Query(ge=1900),
 ):
+    _validate_vehicle_params(brand, model, year)
     return get_current_listings(brand, model, year)
 
 
@@ -50,6 +63,7 @@ def sentiment_score(
     model: str = Query(min_length=1),
     year: int = Query(ge=1900),
 ):
+    _validate_vehicle_params(brand, model, year)
     return get_sentiment_score(brand, model, year)
 
 
@@ -59,6 +73,7 @@ def prediction(
     model: str = Query(min_length=1),
     year: int = Query(ge=1900),
 ):
+    _validate_vehicle_params(brand, model, year)
     historical = get_historical_prices(brand, model, year)
     listings = get_current_listings(brand, model, year)
     sentiment = get_sentiment_score(brand, model, year)
@@ -67,12 +82,15 @@ def prediction(
         raise HTTPException(status_code=404, detail="Insufficient data for prediction")
 
     listing_avg = sum(item.price for item in listings) / len(listings)
-    result = predict_prices(
+    forecast, explanation = predict_prices(
         historical_prices=[point.average_price for point in historical],
         listing_avg=listing_avg,
         sentiment_score=float(sentiment["score"]),
     )
-    return result
+    return {
+        "forecast": forecast,
+        "explanation": explanation,
+    }
 
 
 @app.get("/undervalued-listings")
@@ -81,6 +99,7 @@ def undervalued_listings(
     model: str = Query(min_length=1),
     year: int = Query(ge=1900),
 ):
+    _validate_vehicle_params(brand, model, year)
     listings = get_current_listings(brand, model, year)
     return find_undervalued_listings(listings)
 
@@ -91,6 +110,7 @@ def analysis(
     model: str = Query(min_length=1),
     year: int = Query(ge=1900),
 ):
+    _validate_vehicle_params(brand, model, year)
     try:
         historical = get_historical_prices(brand, model, year)
         listings = get_current_listings(brand, model, year)
@@ -99,11 +119,13 @@ def analysis(
         if not historical or not listings:
             raise HTTPException(status_code=404, detail="Insufficient data for analysis")
         listing_avg = sum(item.price for item in listings) / len(listings)
-        forecast = predict_prices(
+        forecast, explanation = predict_prices(
             historical_prices=[point.average_price for point in historical],
             listing_avg=listing_avg,
             sentiment_score=float(sentiment["score"]),
         )
+    except HTTPException:
+        raise
     except Exception as exc:  # pragma: no cover
         logger.exception("Analysis failed for %s %s %s", brand, model, year)
         raise HTTPException(status_code=500, detail="Unable to complete analysis: processing_error") from exc
@@ -113,11 +135,12 @@ def analysis(
         "sentiment": sentiment,
         "historical_prices": historical,
         "prediction": forecast,
+        "prediction_explanation": explanation,
         "current_listing_average": round(listing_avg, 2),
         "undervalued_listings": undervalued,
         "data_sources": {
-            "historical": "Market sales aggregators / fallback model",
+            "historical": "Market sales aggregators / fallback model (inflation-adjusted)",
             "listings": "Marketplace APIs where available; compliant scraping where permitted",
-            "sentiment": "Forums, Reddit, owner communities, and review sites",
+            "sentiment": "Forums, Reddit, owner communities, and review sites (weighted analysis)",
         },
     }

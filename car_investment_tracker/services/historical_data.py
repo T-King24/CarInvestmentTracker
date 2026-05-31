@@ -21,6 +21,10 @@ TREND_PENALTY_FACTOR = 0.012
 MAX_AGE_FOR_FACTOR = 30
 AGE_FACTOR_MULTIPLIER = 0.015
 
+# UK inflation rate (approximate annual average): 2.5%
+# Using a conservative estimate for long-term inflation
+ANNUAL_INFLATION_RATE = 0.025
+
 BRAND_VALUE_MULTIPLIERS = {
     "aston martin": 1.35,
     "audi": 1.05,
@@ -47,6 +51,16 @@ def _base_market_price(brand: str, model: str, year: int, current_year: int) -> 
     return max(MIN_PRICE_FLOOR_USD, 16000.0 * brand_factor * model_factor * age_factor)
 
 
+def _inflation_adjustment(year: int, base_year: int) -> float:
+    """Calculate inflation multiplier from year to base_year (current year).
+    
+    Returns the factor by which a price from 'year' should be adjusted to current value.
+    E.g., a £1000 car in 2000 is worth £1000 * adjustment_factor in today's money.
+    """
+    years_difference = base_year - year
+    return (1 + ANNUAL_INFLATION_RATE) ** years_difference
+
+
 @cache.cached
 def get_historical_prices(brand: str, model: str, year: int) -> list[PricePoint]:
     seed = _stable_seed("historical", brand, model, year) & 0xFFFFFFFF
@@ -71,6 +85,11 @@ def get_historical_prices(brand: str, model: str, year: int) -> list[PricePoint]
         trend_penalty = depreciation * (1 + (years_from_now * TREND_PENALTY_FACTOR))
         growth = collector_bump - trend_penalty + market_noise
         price = max(MIN_PRICE_FLOOR_USD, price * (1 + growth))
-        data.append(PricePoint(year=yr, average_price=round(price, 2)))
+        
+        # Adjust price for inflation: show what nominal price was in current year terms
+        inflation_factor = _inflation_adjustment(yr, current_year)
+        inflation_adjusted_price = price * inflation_factor
+        
+        data.append(PricePoint(year=yr, average_price=round(inflation_adjusted_price, 2)))
 
     return data
