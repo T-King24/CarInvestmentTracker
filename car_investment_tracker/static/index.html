@@ -288,7 +288,7 @@
               tooltip.innerHTML = `
                 <strong>${escapeHtml(title)}</strong><br/>
                 <span style="color: var(--muted);">Source:</span> ${escapeHtml(source)}<br/>
-                <span style="color: var(--muted);">Price:</span> ${isNaN(price) ? 'N/A' : formatPrice(price, escapedCurrency)}<br/>
+                <span style="color: var(--muted);">Price:</span> ${isNaN(price) ? 'N/A' : formatPrice(price, currency)}<br/>
                 <span style="color: var(--muted);">Clean Title:</span> ${cleanTitle}<br/>
                 <span style="color: var(--muted);">URL:</span> <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="color: #7eb8ff; word-break: break-all;">Open</a>
               `;

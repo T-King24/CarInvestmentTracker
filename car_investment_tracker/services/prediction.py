@@ -55,26 +55,24 @@ def predict_prices(
     smoothed_slope = slope * (1 - MOMENTUM_SMOOTHING) + (recent_momentum * MOMENTUM_SMOOTHING)
 
     points: list[PredictionPoint] = []
-    last_price = historical_prices[-1] if historical_prices else listing_avg
+    last_historical_price = historical_prices[-1] if historical_prices else 0.0
     
     for year in range(current_year + 1, current_year + horizon_years + 1):
         # Use smoothed slope for more realistic forecasting
         baseline = smoothed_slope * year + intercept
         blended = (baseline * HISTORICAL_WEIGHT + listing_avg * LISTING_WEIGHT) * sentiment_modifier
-        # Ensure price doesn't jump too much from previous year
         predicted = max(MIN_PRICE_FLOOR_USD, blended)
         points.append(PredictionPoint(year=year, predicted_price=round(predicted, 2)))
-        last_price = predicted
 
     explanation = PredictionExplanation(
         historical_weight=HISTORICAL_WEIGHT,
         listing_weight=LISTING_WEIGHT,
         sentiment_score=sentiment_score,
         sentiment_modifier=round(sentiment_modifier, 4),
-        last_historical_price=round(last_price, 2),
+        last_historical_price=round(last_historical_price, 2),
         current_listing_average=round(listing_avg, 2),
         trend_momentum=round(recent_momentum, 2),
-        model_type="Linear regression with momentum smoothing and inflation adjustment",
+        model_type="Linear Regression with Momentum Smoothing and Inflation Adjustment",
         inflation_adjusted=True,
     )
     
