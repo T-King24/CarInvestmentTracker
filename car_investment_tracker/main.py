@@ -169,7 +169,7 @@ def analysis(
         "data_sources": {
             "historical": "Market sales aggregators / fallback model (all prices inflation-adjusted to current year GBP)",
             "listings": "Marketplace APIs where available; compliant scraping where permitted (current market prices)",
-            "sentiment": "Forums, Reddit, owner communities, and review sites (weighted analysis of {} mentions)".format(sentiment["mentions_analyzed"]),
+            "sentiment": f"Forums, Reddit, owner communities, and review sites (weighted analysis of {sentiment['mentions_analyzed']} mentions)",
         },
         "methodology": {
             "forecast_model": "Linear regression with momentum smoothing",

@@ -81,7 +81,7 @@ def predict_prices(
         last_historical_price=round(last_historical_price, 2),
         current_listing_average=round(listing_avg, 2),
         trend_momentum=round(recent_momentum, 2),
-        model_type="Linear Regression with Momentum Smoothing and Spike Prevention",
+        model_type="Linear Regression with Momentum Smoothing, Spike Prevention, and Inflation Adjustment",
         inflation_adjusted=True,
     )
     

@@ -317,12 +317,13 @@
           const qualityDiv = document.createElement('div');
           qualityDiv.className = 'card';
           qualityDiv.style.marginTop = '1rem';
+          const confidenceColor = getConfidenceColor(latestPayload.summary.prediction_confidence);
           qualityDiv.innerHTML = `
             <h3>📊 Data Quality Assessment</h3>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.8rem;">
               <div>
                 <div style="color: var(--muted); font-size: 0.9rem; font-weight: 600;">Historical Data Points</div>
-                <div style="font-size: 1.1rem; margin-top: 0.3rem;">${latestPayload.data_quality.historical_data_points} years</div>
+                <div style="font-size: 1.1rem; margin-top: 0.3rem;">${latestPayload.data_quality.historical_data_points}</div>
               </div>
               <div>
                 <div style="color: var(--muted); font-size: 0.9rem; font-weight: 600;">Current Listings Analyzed</div>
@@ -330,7 +331,7 @@
               </div>
               <div>
                 <div style="color: var(--muted); font-size: 0.9rem; font-weight: 600;">Prediction Confidence</div>
-                <div style="font-size: 1.1rem; margin-top: 0.3rem; color: ${latestPayload.summary.prediction_confidence === 'High' ? '#10b981' : latestPayload.summary.prediction_confidence === 'Medium' ? '#f59e0b' : '#ef4444'};">${latestPayload.summary.prediction_confidence}</div>
+                <div style="font-size: 1.1rem; margin-top: 0.3rem; color: ${confidenceColor};">${latestPayload.summary.prediction_confidence}</div>
               </div>
             </div>
             <p style="font-size: 0.85rem; color: var(--muted); margin-top: 0.8rem; margin-bottom: 0;">${latestPayload.data_quality.notes}</p>
@@ -444,30 +445,6 @@
           return;
         }
 
-        // Humanize the sentiment modifier explanation
-        let sentimentText = '';
-        if (explanation.sentiment_modifier < 0.95) {
-          sentimentText = `Bearish sentiment: Forecast adjusted down by ${(100 - explanation.sentiment_modifier * 100).toFixed(0)}%`;
-        } else if (explanation.sentiment_modifier > 1.05) {
-          sentimentText = `Bullish sentiment: Forecast adjusted up by ${(explanation.sentiment_modifier * 100 - 100).toFixed(0)}%`;
-        } else {
-          sentimentText = `Neutral sentiment: Forecast remains near trend baseline`;
-        }
-
-        // Humanize the momentum explanation
-        let momentumText = '';
-        if (explanation.trend_momentum > 500) {
-          momentumText = `Strong upward momentum (prices rising ~£${explanation.trend_momentum.toFixed(0)}/year)`;
-        } else if (explanation.trend_momentum > 0) {
-          momentumText = `Modest upward momentum (prices rising ~£${explanation.trend_momentum.toFixed(0)}/year)`;
-        } else if (explanation.trend_momentum < -500) {
-          momentumText = `Strong downward momentum (prices falling ~£${Math.abs(explanation.trend_momentum).toFixed(0)}/year)`;
-        } else if (explanation.trend_momentum < 0) {
-          momentumText = `Modest downward momentum (prices falling ~£${Math.abs(explanation.trend_momentum).toFixed(0)}/year)`;
-        } else {
-          momentumText = `Stable momentum (prices relatively flat)`;
-        }
-
         container.innerHTML = `
           <div class="card explanation-box">
             <h3>📊 Forecast Explained</h3>
@@ -478,11 +455,11 @@
               </div>
               <div class="explanation-item">
                 <div class="explanation-item-label">💡 Market Insight</div>
-                <div>${sentimentText}</div>
+                <div>${getSentimentPercentageText(explanation.sentiment_modifier)}</div>
               </div>
               <div class="explanation-item">
                 <div class="explanation-item-label">📉 Recent Trend</div>
-                <div>${momentumText}</div>
+                <div>${getMomentumText(explanation.trend_momentum)}</div>
               </div>
               <div class="explanation-item">
                 <div class="explanation-item-label">🔍 Baseline Price</div>
@@ -498,7 +475,7 @@
               </div>
             </div>
             <p style="font-size: 0.85rem; color: var(--muted); margin-top: 0.8rem; margin-bottom: 0;">
-              <strong>💡 How to interpret:</strong> The forecast conservatively blends historical trends with current market data, adjusted for inflation and community sentiment. Momentum smoothing prevents unrealistic price jumps. Predictions within ±35% confidence bands are most reliable.
+              <strong>💡 How to interpret:</strong> The forecast conservatively blends historical trends with current market data, adjusted for inflation and community sentiment. Momentum smoothing prevents unrealistic price jumps. Predictions within +35%/-30% bounds from baseline are most reliable.
             </p>
           </div>
         `;
@@ -508,6 +485,36 @@
 
       function formatPrice(price, currency) {
         return Number(price).toLocaleString('en-GB', { style: 'currency', currency });
+      }
+
+      function getSentimentPercentageText(modifier) {
+        if (modifier < 0.95) {
+          return `Bearish sentiment: Forecast adjusted down by ${(100 - modifier * 100).toFixed(0)}%`;
+        } else if (modifier > 1.05) {
+          return `Bullish sentiment: Forecast adjusted up by ${(modifier * 100 - 100).toFixed(0)}%`;
+        } else {
+          return `Neutral sentiment: Forecast remains near trend baseline`;
+        }
+      }
+
+      function getMomentumText(momentum) {
+        if (momentum > 500) {
+          return `Strong upward momentum (prices rising ~£${momentum.toFixed(0)}/year)`;
+        } else if (momentum > 0) {
+          return `Modest upward momentum (prices rising ~£${momentum.toFixed(0)}/year)`;
+        } else if (momentum < -500) {
+          return `Strong downward momentum (prices falling ~£${Math.abs(momentum).toFixed(0)}/year)`;
+        } else if (momentum < 0) {
+          return `Modest downward momentum (prices falling ~£${Math.abs(momentum).toFixed(0)}/year)`;
+        } else {
+          return `Stable momentum (prices relatively flat)`;
+        }
+      }
+
+      function getConfidenceColor(confidence) {
+        if (confidence === 'High') return '#10b981';
+        if (confidence === 'Medium') return '#f59e0b';
+        return '#ef4444';
       }
 
       document.getElementById('download').addEventListener('click', () => {
@@ -547,12 +554,14 @@
             historical_prices_20_years: latestPayload.historical_prices.map(p => ({
               year: p.year,
               average_price: p.average_price,
-              currency: 'GBP (inflation-adjusted)'
+              currency: 'GBP',
+              adjustment_type: 'inflation-adjusted'
             })),
             current_listings_summary: {
               average_price: latestPayload.current_listing_average,
               listings_analyzed: latestPayload.data_quality.current_listings_count,
-              currency: 'GBP'
+              currency: 'GBP',
+              adjustment_type: 'nominal (current prices)'
             },
             undervalued_opportunities: latestPayload.undervalued_listings.length > 0 
               ? latestPayload.undervalued_listings.map(l => ({
