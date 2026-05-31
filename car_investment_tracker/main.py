@@ -18,6 +18,8 @@ from car_investment_tracker.services.ownership_costs import calculate_ownership_
 from car_investment_tracker.services.spec_adjustments import calculate_spec_adjustments, adjust_prices_for_specs
 from car_investment_tracker.services.market_events import get_market_events
 from car_investment_tracker.services.sentiment_sources import get_sentiment_source_breakdown
+from car_investment_tracker.services.scenario_simulator import calculate_scenario_adjustment, ScenarioInput, compare_scenarios
+from car_investment_tracker.services.export_service import export_to_csv, export_investor_report
 from car_investment_tracker.models import DataQualityIndicator
 
 logger = logging.getLogger(__name__)
@@ -193,6 +195,132 @@ def market_events(
         "query": {"brand": brand, "model": model, "year": year},
         "time_range": {"start": start_year, "end": end_year},
     }
+
+
+@app.post("/scenario-simulator")
+def scenario_simulator(
+    brand: str = Query(min_length=1),
+    model: str = Query(min_length=1),
+    year: int = Query(ge=1900),
+    base_price: float = Query(gt=0, description="Current predicted price to simulate against"),
+    scenarios: list[ScenarioInput] = None,
+):
+    """Simulate price changes based on what-if scenarios.
+    
+    Supports scenarios like:
+    - Mileage changes (increase/decrease)
+    - Condition improvements (restoration)
+    - Market downturns
+    - Storage premium
+    """
+    _validate_vehicle_params(brand, model, year)
+    
+    if not scenarios:
+        # Default scenarios if none provided
+        scenarios = [
+            ScenarioInput(
+                scenario_name="Condition Restoration",
+                condition_improvement=2,
+            ),
+            ScenarioInput(
+                scenario_name="5 Years Storage",
+                storage_premium_years=5,
+            ),
+            ScenarioInput(
+                scenario_name="Market Downturn 20%",
+                market_downturn_pct=20,
+            ),
+        ]
+    
+    results = compare_scenarios(base_price, scenarios)
+    
+    return {
+        "query": {"brand": brand, "model": model, "year": year},
+        "base_price": round(base_price, 2),
+        "scenarios": results,
+        "best_case": results[0] if results else None,
+        "worst_case": results[-1] if results else None,
+    }
+
+
+@app.get("/export/csv")
+def export_csv(
+    brand: str = Query(min_length=1),
+    model: str = Query(min_length=1),
+    year: int = Query(ge=1900),
+):
+    """Export analysis data to CSV format."""
+    _validate_vehicle_params(brand, model, year)
+    
+    try:
+        historical = get_historical_prices(brand, model, year)
+        listings = get_current_listings(brand, model, year)
+        sentiment = get_sentiment_score(brand, model, year)
+        
+        if not historical or not listings:
+            raise HTTPException(status_code=404, detail="Insufficient data for export")
+        
+        listing_avg = sum(item.price for item in listings) / len(listings)
+        forecast, _ = predict_prices(
+            historical_prices=[point.average_price for point in historical],
+            listing_avg=listing_avg,
+            sentiment_score=float(sentiment["score"]),
+        )
+        
+        csv_content = export_to_csv(
+            brand=brand,
+            model=model,
+            year=year,
+            historical_prices=[p.dict() for p in historical],
+            predictions=[p.dict() for p in forecast],
+            sentiment_score=float(sentiment["score"]),
+            current_listing_avg=listing_avg,
+        )
+        
+        return {
+            "format": "csv",
+            "filename": f"{brand}_{model}_{year}_analysis.csv",
+            "data": csv_content,
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("CSV export failed")
+        raise HTTPException(status_code=500, detail="Export failed") from exc
+
+
+@app.get("/export/report")
+def export_report(
+    brand: str = Query(min_length=1),
+    model: str = Query(min_length=1),
+    year: int = Query(ge=1900),
+):
+    """Export formatted investor report."""
+    _validate_vehicle_params(brand, model, year)
+    
+    try:
+        # Get full analysis
+        analysis_data = analysis(brand=brand, model=model, year=year)
+        
+        report_content = export_investor_report(
+            brand=brand,
+            model=model,
+            year=year,
+            analysis_data=analysis_data,
+        )
+        
+        return {
+            "format": "text",
+            "filename": f"{brand}_{model}_{year}_investor_report.txt",
+            "data": report_content,
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Report export failed")
+        raise HTTPException(status_code=500, detail="Export failed") from exc
 
 
 @app.get("/ownership-costs")
