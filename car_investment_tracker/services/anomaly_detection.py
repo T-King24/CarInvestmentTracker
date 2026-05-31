@@ -66,7 +66,7 @@ def detect_listing_anomalies(listings: list[Listing], market_price: float = None
             is_anomaly = True
             if z_score > 0:
                 anomaly_type = "Overpriced"
-                reasoning = f"Price is notably high compared to market (z-score: {z_score:.2f}). May indicate cosmetic issues or misrepresentation."
+                reasoning = f"Price is notably high compared to market (z-score: {z_score:.2f}). May indicate condition issues or misrepresentation."
             else:
                 anomaly_type = "Underpriced"
                 reasoning = f"Price is notably low compared to market (z-score: {z_score:.2f}). Potential value opportunity, but verify condition."
