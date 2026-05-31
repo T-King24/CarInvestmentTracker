@@ -12,6 +12,10 @@ from car_investment_tracker.services.historical_data import get_historical_price
 from car_investment_tracker.services.listing_evaluation import find_undervalued_listings
 from car_investment_tracker.services.prediction import predict_prices
 from car_investment_tracker.services.sentiment import get_sentiment_score
+from car_investment_tracker.services.market_metrics import calculate_volatility_metrics
+from car_investment_tracker.services.market_comparables import get_market_comparables
+from car_investment_tracker.services.ownership_costs import calculate_ownership_costs
+from car_investment_tracker.services.spec_adjustments import calculate_spec_adjustments, adjust_prices_for_specs
 from car_investment_tracker.models import DataQualityIndicator
 
 logger = logging.getLogger(__name__)
@@ -73,6 +77,10 @@ def prediction(
     brand: str = Query(min_length=1),
     model: str = Query(min_length=1),
     year: int = Query(ge=1900),
+    transmission: str = Query(default="Automatic"),
+    trim_level: str = Query(default="Standard"),
+    condition: str = Query(default="Average"),
+    mileage_bracket: str = Query(default="Normal"),
 ):
     _validate_vehicle_params(brand, model, year)
     historical = get_historical_prices(brand, model, year)
@@ -82,16 +90,89 @@ def prediction(
     if not historical or not listings:
         raise HTTPException(status_code=404, detail="Insufficient data for prediction")
 
+    # Apply spec adjustments to historical prices
+    adjusted_historical = adjust_prices_for_specs(
+        [point.average_price for point in historical],
+        transmission=transmission,
+        trim_level=trim_level,
+        condition=condition,
+        mileage_bracket=mileage_bracket,
+    )
+    
     listing_avg = sum(item.price for item in listings) / len(listings)
     forecast, explanation = predict_prices(
-        historical_prices=[point.average_price for point in historical],
+        historical_prices=adjusted_historical,
         listing_avg=listing_avg,
         sentiment_score=float(sentiment["score"]),
     )
+    
     return {
         "forecast": forecast,
         "explanation": explanation,
+        "specs_applied": {
+            "transmission": transmission,
+            "trim_level": trim_level,
+            "condition": condition,
+            "mileage_bracket": mileage_bracket,
+        }
     }
+
+
+@app.get("/volatility-index")
+def volatility_index(
+    brand: str = Query(min_length=1),
+    model: str = Query(min_length=1),
+    year: int = Query(ge=1900),
+):
+    """Get auction volatility metrics for the vehicle."""
+    _validate_vehicle_params(brand, model, year)
+    historical = get_historical_prices(brand, model, year)
+    
+    if not historical:
+        raise HTTPException(status_code=404, detail="Insufficient data for volatility analysis")
+    
+    prices = [point.average_price for point in historical]
+    metrics = calculate_volatility_metrics(prices)
+    
+    return metrics
+
+
+@app.get("/market-comparables")
+def market_comparables(
+    brand: str = Query(min_length=1),
+    model: str = Query(min_length=1),
+    year: int = Query(ge=1900),
+):
+    """Get recent comparable sales for the vehicle."""
+    _validate_vehicle_params(brand, model, year)
+    comparables = get_market_comparables(brand, model, year)
+    
+    if not comparables:
+        raise HTTPException(status_code=404, detail="No comparable sales found")
+    
+    return {
+        "comparables": comparables,
+        "query": {"brand": brand, "model": model, "year": year},
+    }
+
+
+@app.get("/ownership-costs")
+def ownership_costs(
+    brand: str = Query(min_length=1),
+    model: str = Query(min_length=1),
+    year: int = Query(ge=1900),
+    vehicle_price: float = Query(gt=0),
+):
+    """Calculate total cost of ownership."""
+    _validate_vehicle_params(brand, model, year)
+    
+    costs = calculate_ownership_costs(
+        vehicle_price=vehicle_price,
+        vehicle_brand=brand,
+        vehicle_year=year,
+    )
+    
+    return costs
 
 
 @app.get("/undervalued-listings")
@@ -110,6 +191,11 @@ def analysis(
     brand: str = Query(min_length=1),
     model: str = Query(min_length=1),
     year: int = Query(ge=1900),
+    transmission: str = Query(default="Automatic"),
+    trim_level: str = Query(default="Standard"),
+    condition: str = Query(default="Average"),
+    mileage_bracket: str = Query(default="Normal"),
+    vehicle_price: float = Query(default=None),
 ):
     _validate_vehicle_params(brand, model, year)
     try:
@@ -117,14 +203,50 @@ def analysis(
         listings = get_current_listings(brand, model, year)
         sentiment = get_sentiment_score(brand, model, year)
         undervalued = find_undervalued_listings(listings)
+        
         if not historical or not listings:
             raise HTTPException(status_code=404, detail="Insufficient data for analysis")
+        
+        # Apply spec adjustments
+        adjusted_historical = adjust_prices_for_specs(
+            [point.average_price for point in historical],
+            transmission=transmission,
+            trim_level=trim_level,
+            condition=condition,
+            mileage_bracket=mileage_bracket,
+        )
+        
         listing_avg = sum(item.price for item in listings) / len(listings)
         forecast, explanation = predict_prices(
-            historical_prices=[point.average_price for point in historical],
+            historical_prices=adjusted_historical,
             listing_avg=listing_avg,
             sentiment_score=float(sentiment["score"]),
         )
+        
+        # Calculate volatility metrics
+        volatility = calculate_volatility_metrics([point.average_price for point in historical])
+        
+        # Get market comparables
+        comparables_data = get_market_comparables(brand, model, year)
+        
+        # Calculate ownership costs if price provided
+        ownership = None
+        if vehicle_price and vehicle_price > 0:
+            ownership = calculate_ownership_costs(
+                vehicle_price=vehicle_price,
+                vehicle_brand=brand,
+                vehicle_year=year,
+            )
+        
+        # Spec adjustments info
+        spec_adjustments_info = calculate_spec_adjustments(
+            base_price=listing_avg,
+            transmission=transmission,
+            trim_level=trim_level,
+            condition=condition,
+            mileage_bracket=mileage_bracket,
+        )
+        
     except HTTPException:
         raise
     except Exception as exc:  # pragma: no cover
@@ -165,6 +287,10 @@ def analysis(
         "prediction_explanation": explanation,
         "current_listing_average": round(listing_avg, 2),
         "undervalued_listings": undervalued,
+        "volatility_metrics": volatility,
+        "market_comparables": comparables_data,
+        "spec_adjustments": spec_adjustments_info,
+        "ownership_costs": ownership,
         "data_quality": data_quality,
         "data_sources": {
             "historical": "Market sales aggregators / fallback model (all prices inflation-adjusted to current year GBP)",
@@ -176,5 +302,7 @@ def analysis(
             "spike_prevention": "Predicted prices constrained between -30% and +35% of baseline to prevent unrealistic jumps",
             "inflation_adjustment": "All historical data converted to current year GBP for fair long-term comparison",
             "sentiment_impact": "Sentiment score (0-5) adjusted to ±15% multiplier on forecast (clamped for stability)",
+            "confidence_intervals": "±10% bands around predictions to show forecast uncertainty",
+            "spec_adjustments": "Prices adjusted for transmission, trim level, condition, and mileage bracket",
         },
     }

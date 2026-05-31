@@ -31,6 +31,8 @@ class SentimentResult(BaseModel):
 class PredictionPoint(BaseModel):
     year: int
     predicted_price: float
+    lower_bound: float = Field(description="Lower confidence interval bound (±10%)")
+    upper_bound: float = Field(description="Upper confidence interval bound (±10%)")
 
 
 class PredictionExplanation(BaseModel):
@@ -44,6 +46,27 @@ class PredictionExplanation(BaseModel):
     trend_momentum: float = Field(description="Recent price change momentum (noise-smoothed)")
     model_type: str = Field(description="Forecasting approach used")
     inflation_adjusted: bool = Field(description="Whether historical prices are inflation-adjusted")
+
+
+class VolatilityMetrics(BaseModel):
+    """Auction price volatility metrics."""
+    coefficient_of_variation: float = Field(description="Std deviation / mean (0-1, higher = more volatile)")
+    standard_deviation: float = Field(description="Standard deviation of historical prices")
+    volatility_score: int = Field(ge=1, le=10, description="Volatility rating (1=very stable, 10=highly volatile)")
+    price_range: float = Field(description="Max - Min historical price")
+    stability_assessment: str = Field(description="Human-readable volatility assessment")
+
+
+class OwnershipCostBreakdown(BaseModel):
+    """Annual ownership costs breakdown."""
+    vehicle_price: float = Field(description="Purchase price of vehicle")
+    annual_depreciation: float = Field(description="Estimated annual depreciation (yearly)")
+    annual_insurance: float = Field(description="Estimated annual insurance cost")
+    annual_maintenance: float = Field(description="Estimated annual maintenance cost")
+    annual_storage: float = Field(description="Estimated annual storage/parking cost")
+    total_annual_cost: float = Field(description="Total annual ownership cost")
+    cost_per_mile: float = Field(description="Estimated cost per mile driven (assuming 12k miles/year)")
+    depreciation_rate: float = Field(description="Annual depreciation as % of vehicle price")
 
 
 class DataQualityIndicator(BaseModel):
