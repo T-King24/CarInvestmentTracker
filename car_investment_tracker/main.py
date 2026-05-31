@@ -20,6 +20,9 @@ from car_investment_tracker.services.market_events import get_market_events
 from car_investment_tracker.services.sentiment_sources import get_sentiment_source_breakdown
 from car_investment_tracker.services.scenario_simulator import calculate_scenario_adjustment, ScenarioInput, compare_scenarios
 from car_investment_tracker.services.export_service import export_to_csv, export_investor_report
+from car_investment_tracker.services.anomaly_detection import detect_listing_anomalies
+from car_investment_tracker.services.macro_economics import get_macroeconomic_context, calculate_economic_price_adjustment
+from car_investment_tracker.services.rarity_projection import calculate_rarity_projection
 from car_investment_tracker.models import DataQualityIndicator
 
 logger = logging.getLogger(__name__)
@@ -353,6 +356,118 @@ def undervalued_listings(
     return find_undervalued_listings(listings)
 
 
+@app.get("/anomalies")
+def anomalies(
+    brand: str = Query(min_length=1),
+    model: str = Query(min_length=1),
+    year: int = Query(ge=1900),
+):
+    """Detect anomalous listings using statistical analysis.
+    
+    Returns listings ranked by anomaly score, identifying underpriced deals
+    and overpriced outliers compared to market statistics.
+    """
+    _validate_vehicle_params(brand, model, year)
+    
+    listings = get_current_listings(brand, model, year)
+    if not listings:
+        raise HTTPException(status_code=404, detail="No listings found for analysis")
+    
+    # Get market price prediction for context
+    historical = get_historical_prices(brand, model, year)
+    sentiment = get_sentiment_score(brand, model, year)
+    
+    market_price = None
+    if historical and listings:
+        listing_avg = sum(item.price for item in listings) / len(listings)
+        forecast, _ = predict_prices(
+            historical_prices=[point.average_price for point in historical],
+            listing_avg=listing_avg,
+            sentiment_score=float(sentiment["score"]),
+        )
+        if forecast:
+            market_price = forecast[0].average_price if forecast else None
+    
+    anomalies = detect_listing_anomalies(listings, market_price=market_price)
+    
+    return {
+        "query": {"brand": brand, "model": model, "year": year},
+        "market_price": market_price,
+        "total_listings_analyzed": len(listings),
+        "anomalies_detected": sum(1 for a in anomalies if a.is_anomaly),
+        "anomalies": anomalies,
+    }
+
+
+@app.get("/macro-economic-context")
+def macro_economic_context():
+    """Get current macro-economic context and its impact on vehicle valuations.
+    
+    Returns economic indicators, sentiment analysis, and projections
+    for how macro factors affect luxury vehicle pricing.
+    """
+    context = get_macroeconomic_context()
+    return {
+        "timestamp": "2026-05-31",
+        "context": context,
+        "interpretation": {
+            "outlook": context.economic_outlook,
+            "impact": context.impact_on_vehicle_prices,
+            "sentiment": context.luxury_market_sentiment,
+        },
+    }
+
+
+@app.post("/economic-price-adjustment")
+def economic_price_adjustment(
+    base_price: float = Query(gt=0, description="Base vehicle price"),
+    gdp_growth: float = Query(default=None, description="GDP growth rate (%)"),
+    unemployment_rate: float = Query(default=None, description="Unemployment rate (%)"),
+    interest_rates: float = Query(default=None, description="Interest rates (%)"),
+):
+    """Calculate price adjustment based on macro-economic factors.
+    
+    Adjusts a base price according to current economic conditions
+    (GDP growth, unemployment, interest rates).
+    """
+    result = calculate_economic_price_adjustment(
+        base_price=base_price,
+        gdp_growth=gdp_growth,
+        unemployment_rate=unemployment_rate,
+        interest_rates=interest_rates,
+    )
+    
+    return result
+
+
+@app.get("/rarity-projection")
+def rarity_projection(
+    brand: str = Query(min_length=1),
+    model: str = Query(min_length=1),
+    year: int = Query(ge=1900),
+):
+    """Project long-term rarity and scarcity of a vehicle.
+    
+    Estimates production volumes, survival rates, and future rarity scores
+    to assess long-term value appreciation potential due to scarcity.
+    """
+    _validate_vehicle_params(brand, model, year)
+    
+    projection = calculate_rarity_projection(brand, model, year)
+    
+    return {
+        "query": {"brand": brand, "model": model, "year": year},
+        "projection": projection,
+        "value_implications": {
+            "current_rarity": f"{projection.rarity_score}/10",
+            "expected_5yr": f"{projection.future_rarity_score_5yr}/10",
+            "expected_10yr": f"{projection.future_rarity_score_10yr}/10",
+            "rarity_driven_upside": "High" if projection.rarity_score >= 7 else "Medium" if projection.rarity_score >= 5 else "Low",
+        },
+    }
+
+
+
 @app.get("/analysis")
 def analysis(
     brand: str = Query(min_length=1),
@@ -410,6 +525,21 @@ def analysis(
         # Get sentiment source breakdown
         sentiment_breakdown = get_sentiment_source_breakdown(brand, model, year)
         
+        # Get rarity projection
+        rarity_proj = calculate_rarity_projection(brand, model, year)
+        
+        # Get anomalies
+        listing_anomalies = detect_listing_anomalies(listings, market_price=forecast[0].predicted_price if forecast else None)
+        
+        # Get macro-economic context
+        macro_context = get_macroeconomic_context()
+        
+        # Calculate economic price adjustment
+        listing_avg = sum(item.price for item in listings) / len(listings)
+        econ_adjustment = calculate_economic_price_adjustment(
+            base_price=listing_avg,
+        )
+        
         # Calculate ownership costs if price provided
         ownership = None
         if vehicle_price and vehicle_price > 0:
@@ -418,6 +548,7 @@ def analysis(
                 vehicle_brand=brand,
                 vehicle_year=year,
             )
+        
         
         # Spec adjustments info
         spec_adjustments_info = calculate_spec_adjustments(
@@ -469,11 +600,15 @@ def analysis(
         "prediction_explanation": explanation,
         "current_listing_average": round(listing_avg, 2),
         "undervalued_listings": undervalued,
+        "listing_anomalies": listing_anomalies,
         "volatility_metrics": volatility,
         "market_comparables": comparables_data,
         "market_events": events,
         "spec_adjustments": spec_adjustments_info,
         "ownership_costs": ownership,
+        "rarity_projection": rarity_proj,
+        "macro_economic_context": macro_context,
+        "economic_price_adjustment": econ_adjustment,
         "data_quality": data_quality,
         "data_sources": {
             "historical": "Market sales aggregators / fallback model (all prices inflation-adjusted to current year GBP)",
@@ -490,5 +625,8 @@ def analysis(
             "volatility_tracking": "Coefficient of variation and volatility score (1-10) indicate market stability",
             "event_markers": "Major market events annotated to explain price movements",
             "sentiment_sources": "Weighted sentiment from forums (30%), auctions (35%), news (20%), and social media (15%)",
+            "anomaly_detection": "Z-score based statistical analysis to identify outlier listings",
+            "rarity_analysis": "Production volume and survival rate modeling for long-term value projection",
+            "macro_economic": "Economic indicators and their historical correlations with luxury vehicle valuations",
         },
     }
