@@ -7,6 +7,7 @@ class VehicleQuery(BaseModel):
     brand: str = Field(min_length=1)
     model: str = Field(min_length=1)
     year: int = Field(ge=1900)
+    variant: str | None = Field(default=None, description="Optional derivative/variant (e.g. 'Carrera 4S')")
 
 
 class PricePoint(BaseModel):
@@ -14,20 +15,55 @@ class PricePoint(BaseModel):
     average_price: float
     nominal_price: float = Field(default=None, description="Nominal (non-adjusted) price")
     inflation_adjusted_price: float = Field(default=None, description="Inflation-adjusted price")
+    # Source transparency for real historical data. Historical prices are sourced
+    # from sold-price / auction-result feeds, never fabricated.
+    currency: str = Field(default="GBP", description="Currency of the price point")
+    price_type: str = Field(default="sold", description="'sold' (auction/transaction) or 'asking'")
+    sample_size: int | None = Field(default=None, description="Number of underlying transactions")
+    source_name: str | None = Field(default=None, description="Provider/source of the data point")
+    source_url: str | None = Field(default=None, description="Link to the source data")
+    confidence: str | None = Field(default=None, description="Source confidence (Low/Medium/High)")
 
 
 class Listing(BaseModel):
     source: str
     title: str
     price: float
-    currency: str = "USD"
+    currency: str = "GBP"
     clean_title: bool
     url: HttpUrl
+    # Real-listing metadata. ``url`` points to the exact advert detail page.
+    listing_id: str | None = Field(default=None, description="Provider's unique advert id")
+    price_type: str = Field(default="asking", description="'asking' for live adverts, 'sold' for transactions")
+    mileage: int | None = Field(default=None, description="Advertised mileage")
+    year: int | None = Field(default=None, description="Vehicle year")
+    variant: str | None = Field(default=None, description="Derivative/variant")
+    transmission: str | None = Field(default=None, description="Transmission")
+    fuel_type: str | None = Field(default=None, description="Fuel type")
+    location: str | None = Field(default=None, description="Seller location")
+    seller_type: str | None = Field(default=None, description="Trade or Private")
+    date_collected: str | None = Field(default=None, description="When the listing was collected (ISO date)")
+
+
+class MarketDiscussion(BaseModel):
+    """A real news article or forum thread discussing a car's value/outlook."""
+    title: str
+    url: HttpUrl
+    source: str = Field(description="Publisher or forum name")
+    published_date: str | None = Field(default=None, description="Publication date (ISO)")
+    summary: str = Field(default="", description="Short excerpt/snippet")
+    sentiment_score: float | None = Field(default=None, ge=0, le=5, description="Price-outlook sentiment (0-5)")
+    price_outlook: str | None = Field(
+        default=None,
+        description="appreciating | stable | depreciating | overvalued | undervalued | collectible-demand",
+    )
 
 
 class SentimentResult(BaseModel):
     score: float = Field(ge=0, le=5)
     mentions_analyzed: int
+    available: bool = Field(default=True, description="False when no real sources were found")
+    outlook: str = Field(default="", description="Plain-English price outlook")
 
 
 class SentimentSourceBreakdown(BaseModel):
@@ -42,6 +78,7 @@ class SentimentSourceBreakdown(BaseModel):
     social_mentions: int = Field(description="Number of social media mentions")
     overall_score: float = Field(ge=0, le=5, description="Weighted overall sentiment score")
     total_mentions: int = Field(description="Total mentions across all sources")
+    available: bool = Field(default=True, description="False when no real sources were found")
 
 
 class PredictionPoint(BaseModel):
@@ -95,3 +132,14 @@ class DataQualityIndicator(BaseModel):
     data_consistency: str = Field(description="Overall data consistency assessment")
     confidence_level: str = Field(description="Low, Medium, or High confidence in prediction")
     notes: str = Field(description="Human-readable notes about data quality")
+
+
+class DataAvailability(BaseModel):
+    """Transparency about which real data sources returned data for a query."""
+    provider: str = Field(description="Name of the active data provider")
+    fetched_at: str = Field(description="ISO timestamp the data was fetched/served")
+    historical_prices: bool = Field(description="True when real historical prices were available")
+    current_listings: bool = Field(description="True when real current listings were available")
+    sentiment: bool = Field(description="True when real sentiment sources were available")
+    discussions: bool = Field(description="True when real market discussions were available")
+    warnings: list[str] = Field(default_factory=list, description="Human-readable data availability warnings")

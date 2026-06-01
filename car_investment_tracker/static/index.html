@@ -26,6 +26,10 @@
         --success: #22c55e;
         --radius: 16px;
         --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        /* Brand theme accents (updated dynamically when a make is selected) */
+        --brand-primary: #f5a524;
+        --brand-secondary: #6aa8ff;
+        --brand-glow: rgba(245, 165, 36, 0.10);
       }
       * { box-sizing: border-box; }
       html { scroll-behavior: smooth; }
@@ -33,12 +37,13 @@
         font-family: "Inter", "Segoe UI", system-ui, Arial, sans-serif;
         margin: 0;
         background:
-          radial-gradient(1100px 520px at 12% -8%, rgba(245, 165, 36, 0.08), transparent 60%),
+          radial-gradient(1100px 520px at 12% -8%, var(--brand-glow), transparent 60%),
           radial-gradient(900px 600px at 100% 0%, rgba(106, 168, 255, 0.08), transparent 55%),
           var(--bg);
         color: var(--text);
         line-height: 1.5;
         -webkit-font-smoothing: antialiased;
+        transition: background 0.6s ease;
       }
       .container { max-width: 1160px; margin: 0 auto; padding: 2.4rem 1.25rem 3rem; }
 
@@ -209,6 +214,30 @@
         border-radius: 11px;
       }
       .explanation-item-label { color: var(--muted); font-weight: 600; margin-bottom: 0.35rem; font-size: 0.8rem; }
+      /* Data-availability banner */
+      .availability-banner {
+        margin-top: 1rem; padding: 0.85rem 1rem; border-radius: 12px;
+        font-size: 0.9rem; border: 1px solid var(--border);
+      }
+      .availability-banner.ok { background: rgba(34, 197, 94, 0.10); border-color: rgba(34, 197, 94, 0.4); }
+      .availability-banner.partial { background: rgba(245, 165, 36, 0.10); border-color: rgba(245, 165, 36, 0.45); }
+      .availability-banner.none { background: rgba(239, 68, 68, 0.10); border-color: rgba(239, 68, 68, 0.45); }
+      .availability-banner ul { margin: 0.5rem 0 0; padding-left: 1.1rem; }
+      .availability-banner li { margin: 0.2rem 0; color: var(--muted); }
+      /* Market discussion items */
+      .discussion-item {
+        padding: 0.95rem 1rem; border: 1px solid var(--border);
+        border-radius: 12px; margin-bottom: 0.7rem; background: rgba(255, 255, 255, 0.02);
+      }
+      .discussion-item h4 { margin: 0 0 0.35rem; font-size: 1rem; }
+      .discussion-item h4 a { color: var(--brand-secondary); text-decoration: none; }
+      .discussion-item h4 a:hover { text-decoration: underline; }
+      .discussion-meta { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.4rem; }
+      .outlook-tag {
+        display: inline-block; padding: 0.12rem 0.55rem; border-radius: 999px;
+        font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+        background: var(--brand-glow); color: var(--brand-primary); border: 1px solid var(--brand-primary);
+      }
       @media (max-width: 560px) {
         h1 { font-size: 1.65rem; }
         .container { padding: 1.6rem 1rem 2.4rem; }
@@ -230,6 +259,7 @@
         <div class="grid">
           <label>Make <select id="brand" aria-label="Make"><option value="">Select a make...</option></select></label>
           <label>Model <select id="model" aria-label="Model"><option value="">Select a model...</option></select></label>
+          <label>Variant <select id="variant" aria-label="Variant"><option value="">Any variant</option></select></label>
           <label>Year <select id="year" aria-label="Year"><option value="">Select a year...</option></select></label>
         </div>
         <div class="actions">
@@ -238,6 +268,7 @@
         </div>
         <div id="errorMessage" class="error-message"></div>
         <div id="loadingIndicator" class="loading-indicator"></div>
+        <div id="availabilityBanner" class="availability-banner" style="display: none;"></div>
         <p id="sentiment" class="kpi"></p>
       </div>
 
@@ -255,11 +286,18 @@
         </table>
         <div id="tooltip" style="display: none;"></div>
       </div>
+
+      <div class="card" id="discussionsCard">
+        <h2>Market Discussion Sources</h2>
+        <p class="small">Real news articles and forum threads discussing this car's predicted pricing.</p>
+        <div id="discussionList"></div>
+      </div>
     </div>
 
     <script>
       let latestPayload = null;
       let chart = null;
+      let brandThemes = {};
 
       // Helper function to escape HTML special characters
       function escapeHtml(text) {
@@ -273,13 +311,36 @@
         return String(text).replace(/[&<>"']/g, m => map[m]);
       }
 
+      // Apply the brand-associated colour theme by updating CSS variables.
+      function applyBrandTheme(make) {
+        const fallback = { accent: '#f5a524', accent2: '#e0791a', tint: 'rgba(245, 165, 36, 0.10)' };
+        const theme = brandThemes[make] || brandThemes['_default'] || fallback;
+        const root = document.documentElement;
+        root.style.setProperty('--brand-primary', theme.accent);
+        root.style.setProperty('--brand-secondary', theme.accent2);
+        root.style.setProperty('--brand-glow', theme.tint);
+      }
+
+      async function loadBrandThemes() {
+        try {
+          const response = await fetch('/brand-themes');
+          if (!response.ok) return;
+          brandThemes = await response.json();
+        } catch (error) {
+          console.error('Error loading brand themes:', error);
+        }
+      }
+
       // Initialize dropdowns on page load
       async function initializeDropdowns() {
+        await loadBrandThemes();
         await populateMakesDropdown();
         // Set default selection and populate other dropdowns
         document.getElementById('brand').value = 'Porsche';
+        applyBrandTheme('Porsche');
         await populateModelsDropdown();
         document.getElementById('model').value = '911';
+        await populateVariantsDropdown();
         await populateYearsDropdown();
         document.getElementById('year').value = '2004';
         // Run initial analysis with defaults
@@ -308,9 +369,11 @@
         const brand = document.getElementById('brand').value;
         const modelSelect = document.getElementById('model');
         const yearSelect = document.getElementById('year');
+        const variantSelect = document.getElementById('variant');
         
         modelSelect.innerHTML = '<option value="">Select a model...</option>';
         yearSelect.innerHTML = '<option value="">Select a year...</option>';
+        variantSelect.innerHTML = '<option value="">Any variant</option>';
         
         if (!brand) return;
         
@@ -326,6 +389,32 @@
           });
         } catch (error) {
           console.error('Error populating models:', error);
+        }
+      }
+
+      async function populateVariantsDropdown() {
+        const brand = document.getElementById('brand').value;
+        const model = document.getElementById('model').value;
+        const variantSelect = document.getElementById('variant');
+
+        variantSelect.innerHTML = '<option value="">Any variant</option>';
+
+        if (!brand || !model) return;
+
+        try {
+          const response = await fetch(
+            `/dropdown-variants?make=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`
+          );
+          if (!response.ok) throw new Error('Failed to fetch variants');
+          const variants = await response.json();
+          variants.forEach(variant => {
+            const option = document.createElement('option');
+            option.value = variant;
+            option.textContent = variant;
+            variantSelect.appendChild(option);
+          });
+        } catch (error) {
+          console.error('Error populating variants:', error);
         }
       }
 
@@ -358,8 +447,16 @@
       }
 
       // Event listeners for cascading dropdowns
-      document.getElementById('brand').addEventListener('change', populateModelsDropdown);
-      document.getElementById('model').addEventListener('change', populateYearsDropdown);
+      document.getElementById('brand').addEventListener('change', async () => {
+        applyBrandTheme(document.getElementById('brand').value);
+        await populateModelsDropdown();
+        await populateVariantsDropdown();
+        await populateYearsDropdown();
+      });
+      document.getElementById('model').addEventListener('change', async () => {
+        await populateVariantsDropdown();
+        await populateYearsDropdown();
+      });
 
       function validateInputs() {
         const brand = document.getElementById('brand').value.trim();
@@ -394,6 +491,7 @@
 
         const brand = document.getElementById('brand').value.trim();
         const model = document.getElementById('model').value.trim();
+        const variant = document.getElementById('variant').value.trim();
         const year = document.getElementById('year').value;
 
         // Show loading indicator
@@ -406,7 +504,9 @@
         loadingDiv.textContent = 'Loading analysis...';
 
         try {
-          const qs = new URLSearchParams({ brand, model, year });
+          const params = { brand, model, year };
+          if (variant) params.variant = variant;
+          const qs = new URLSearchParams(params);
           const response = await fetch(`/analysis?${qs.toString()}`);
           if (!response.ok) {
             const errorDiv = document.getElementById('errorMessage');
@@ -416,10 +516,18 @@
           }
 
           latestPayload = await response.json();
-          document.getElementById('sentiment').textContent = `Sentiment Score: ${latestPayload.sentiment.score}/5 (${latestPayload.sentiment.mentions_analyzed} mentions analyzed)`;
+
+          renderAvailability(latestPayload.data_availability);
+          renderDiscussions(latestPayload.market_discussions);
+
+          const sentiment = latestPayload.sentiment || {};
+          document.getElementById('sentiment').textContent = sentiment.available
+            ? `Sentiment Score: ${sentiment.score}/5 (${sentiment.mentions_analyzed} real sources analyzed) — ${sentiment.outlook || ''}`
+            : 'Sentiment Score: unavailable (no real discussion sources found for this vehicle)';
 
           const tooltip = document.getElementById('tooltip');
-          const rows = latestPayload.undervalued_listings.map(item => {
+          const undervalued = latestPayload.undervalued_listings || [];
+          const rows = undervalued.map(item => {
             const escapedSource = escapeHtml(item.source);
             const escapedTitle = escapeHtml(item.title);
             const escapedUrl = escapeHtml(item.url);
@@ -434,7 +542,7 @@
               <td><a href="${escapedUrl}" target="_blank" rel="noopener noreferrer" aria-label="View ${escapedTitle} on ${escapedSource}">View details</a></td>
             </tr>`;
           });
-          document.getElementById('listingRows').innerHTML = rows.join('') || '<tr><td colspan="4">No undervalued listings found.</td></tr>';
+          document.getElementById('listingRows').innerHTML = rows.join('') || '<tr><td colspan="4">No real undervalued listings available for this vehicle.</td></tr>';
 
           // Add hover listeners for tooltips
           document.querySelectorAll('.listing-row').forEach(row => {
@@ -492,6 +600,9 @@
             ...predictionPoints.map(p => p.predicted_price)
           ];
 
+          if (typeof Chart === 'undefined') {
+            console.warn('Chart.js failed to load; skipping chart render.');
+          } else {
           if (chart) chart.destroy();
           chart = new Chart(document.getElementById('trendChart'), {
             type: 'line',
@@ -546,6 +657,7 @@
               }
             }
           });
+          }
         } catch (error) {
           const errorDiv = document.getElementById('errorMessage');
           errorDiv.textContent = 'An unexpected error occurred. Please try again.';
@@ -583,6 +695,58 @@
 
       document.getElementById('analyze').addEventListener('click', runAnalysis);
 
+      function renderAvailability(availability) {
+        const banner = document.getElementById('availabilityBanner');
+        if (!availability) { banner.style.display = 'none'; return; }
+
+        const flags = [availability.historical_prices, availability.current_listings, availability.sentiment];
+        const availableCount = flags.filter(Boolean).length;
+        let cls = 'none';
+        let headline = 'No real market data is currently available for this vehicle.';
+        if (availableCount === flags.length) {
+          cls = 'ok';
+          headline = `Showing real market data from ${escapeHtml(availability.provider)}.`;
+        } else if (availableCount > 0) {
+          cls = 'partial';
+          headline = `Showing partial real market data from ${escapeHtml(availability.provider)}.`;
+        }
+
+        const warnings = Array.isArray(availability.warnings) ? availability.warnings : [];
+        const warningHtml = warnings.length
+          ? `<ul>${warnings.map(w => `<li>${escapeHtml(w)}</li>`).join('')}</ul>`
+          : '';
+        const fetchedAt = availability.fetched_at ? ` Data fetched at ${escapeHtml(availability.fetched_at)}.` : '';
+
+        banner.className = `availability-banner ${cls}`;
+        banner.innerHTML = `<strong>${escapeHtml(headline)}</strong>${fetchedAt}${warningHtml}`;
+        banner.style.display = 'block';
+      }
+
+      function renderDiscussions(discussions) {
+        const container = document.getElementById('discussionList');
+        const list = Array.isArray(discussions) ? discussions : [];
+        if (!list.length) {
+          container.innerHTML = '<p class="small">No real discussion sources are available for this vehicle yet.</p>';
+          return;
+        }
+        container.innerHTML = list.map(d => {
+          const title = escapeHtml(d.title || 'Untitled');
+          const url = escapeHtml(d.url || '#');
+          const source = escapeHtml(d.source || 'Unknown source');
+          const date = d.published_date ? escapeHtml(d.published_date) : '';
+          const summary = escapeHtml(d.summary || '');
+          const outlook = d.price_outlook
+            ? `<span class="outlook-tag">${escapeHtml(d.price_outlook)}</span>`
+            : '';
+          return `<div class="discussion-item">
+            <h4><a href="${url}" target="_blank" rel="noopener noreferrer">${title}</a></h4>
+            <div class="discussion-meta">${source}${date ? ' • ' + date : ''} ${outlook}</div>
+            ${summary ? `<p style="margin:0;">${summary}</p>` : ''}
+          </div>`;
+        }).join('');
+      }
+
+
       function formatPrice(price, currency) {
         return Number(price).toLocaleString('en-GB', { style: 'currency', currency });
       }
@@ -594,12 +758,24 @@
         }
         
         // Create user-friendly export with summary at top
+        const sentiment = latestPayload.sentiment || {};
+        const explanation = latestPayload.prediction_explanation || {};
+        const predictions = latestPayload.prediction || [];
+        const historical = latestPayload.historical_prices || [];
+        const undervalued = latestPayload.undervalued_listings || [];
         const exportData = {
+          // ===== DATA AVAILABILITY =====
+          data_availability: latestPayload.data_availability || {},
+
           // ===== EXECUTIVE SUMMARY =====
           summary: {
-            vehicle: `${latestPayload.query.brand} ${latestPayload.query.model} (${latestPayload.query.year})`,
-            current_market_price: `${formatPrice(latestPayload.current_listing_average, 'GBP')} (average listing)`,
-            sentiment_score: `${latestPayload.sentiment.score}/5 (${latestPayload.sentiment.mentions_analyzed} community mentions analyzed)`,
+            vehicle: `${latestPayload.query.brand} ${latestPayload.query.model}${latestPayload.query.variant ? ' ' + latestPayload.query.variant : ''} (${latestPayload.query.year})`,
+            current_market_price: latestPayload.current_listing_average
+              ? `${formatPrice(latestPayload.current_listing_average, 'GBP')} (average listing)`
+              : 'Unavailable (no real listings)',
+            sentiment_score: sentiment.available
+              ? `${sentiment.score}/5 (${sentiment.mentions_analyzed} real sources analyzed)`
+              : 'Unavailable (no real discussion sources)',
             forecast_confidence: latestPayload.summary.prediction_confidence,
             price_trend_summary: latestPayload.summary.price_trend,
             data_quality: latestPayload.data_quality.notes,
@@ -607,12 +783,12 @@
           
           // ===== FORECAST =====
           forecast_5_year: {
-            predictions: latestPayload.prediction.map(p => ({
+            predictions: predictions.map(p => ({
               year: p.year,
               predicted_price: p.predicted_price,
               currency: 'GBP'
             })),
-            last_historical_price: latestPayload.prediction_explanation.last_historical_price,
+            last_historical_price: explanation.last_historical_price ?? null,
             currency: 'GBP'
           },
           
@@ -621,10 +797,13 @@
           
           // ===== MARKET DATA =====
           market_analysis: {
-            historical_prices_20_years: latestPayload.historical_prices.map(p => ({
+            historical_prices: historical.map(p => ({
               year: p.year,
               average_price: p.average_price,
-              currency: 'GBP',
+              currency: p.currency || 'GBP',
+              price_type: p.price_type,
+              source_name: p.source_name,
+              source_url: p.source_url,
               adjustment_type: 'inflation-adjusted'
             })),
             current_listings_summary: {
@@ -633,8 +812,8 @@
               currency: 'GBP',
               adjustment_type: 'nominal (current prices)'
             },
-            undervalued_opportunities: latestPayload.undervalued_listings.length > 0 
-              ? latestPayload.undervalued_listings.map(l => ({
+            undervalued_opportunities: undervalued.length > 0 
+              ? undervalued.map(l => ({
                   title: l.title,
                   price: l.price,
                   currency: l.currency,
@@ -642,8 +821,11 @@
                   clean_title: l.clean_title,
                   url: l.url
                 }))
-              : 'No undervalued listings found'
+              : 'No real undervalued listings available'
           },
+
+          // ===== MARKET DISCUSSIONS =====
+          market_discussions: latestPayload.market_discussions || [],
           
           // ===== DATA QUALITY =====
           data_quality_assessment: {

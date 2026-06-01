@@ -148,15 +148,17 @@ def export_investor_report(
     # Comparable Sales
     report_lines.append("COMPARABLE RECENT SALES")
     report_lines.append("-" * 80)
-    comparables = analysis_data.get("market_comparables", {}).get("comparables", [])
+    comparables = analysis_data.get("market_comparables", []) or []
+    if isinstance(comparables, dict):  # backwards-compatible with older shape
+        comparables = comparables.get("comparables", [])
     if comparables:
         for i, comp in enumerate(comparables[:5], 1):  # Show top 5
             price = comp.get("price", 0)
-            days_ago = comp.get("days_ago", 0)
-            condition = comp.get("condition", "N/A")
+            currency = comp.get("currency", "GBP")
+            sale_date = comp.get("sale_date", "N/A")
             source = comp.get("source", "N/A")
             report_lines.append(
-                f"{i}. ${price:,.2f} ({days_ago} days ago) - Condition: {condition}/5 - {source}"
+                f"{i}. {currency} {price:,.2f} (sold {sale_date}) - {source}"
             )
     report_lines.append("")
     

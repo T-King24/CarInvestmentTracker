@@ -12,34 +12,152 @@ def _query_params():
     return {"brand": "Porsche", "model": "911", "year": 2004}
 
 
-def test_historical_prices_span_full_car_life():
+# ---------------------------------------------------------------------------
+# Catalog / dropdowns (reference taxonomy, always available)
+# ---------------------------------------------------------------------------
+
+def test_dropdown_makes_returns_catalog():
+    response = client.get("/dropdown-makes")
+    assert response.status_code == 200
+    makes = response.json()
+    assert "Porsche" in makes
+    assert "Ferrari" in makes
+
+
+def test_dropdown_variants_returns_known_variants():
+    response = client.get("/dropdown-variants", params={"make": "Porsche", "model": "911"})
+    assert response.status_code == 200
+    variants = response.json()
+    assert isinstance(variants, list)
+    assert variants  # 911 has known variants
+    assert any("Carrera" in v for v in variants)
+
+
+def test_brand_themes_endpoint_includes_signature_colours():
+    response = client.get("/brand-themes")
+    assert response.status_code == 200
+    themes = response.json()
+    # Ferrari should be red; the UI relies on this exact key shape.
+    assert "Ferrari" in themes
+    assert "accent" in themes["Ferrari"]
+    assert "_default" in themes
+
+
+# ---------------------------------------------------------------------------
+# Health / readiness probe (used by live deployments)
+# ---------------------------------------------------------------------------
+
+def test_healthz_reports_ok_and_null_mode_by_default():
+    response = client.get("/healthz")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    # With no provider configured the app is up but not serving live market data.
+    assert body["data_mode"] == "null"
+    assert "version" in body
+    assert "provider" in body
+
+
+# ---------------------------------------------------------------------------
+# No-fake-data behaviour: with no provider configured, nothing is fabricated
+# ---------------------------------------------------------------------------
+
+def test_no_provider_returns_no_historical_prices():
     response = client.get("/historical-prices", params=_query_params())
     assert response.status_code == 200
-    payload = response.json()
-    # The series should span the car's whole life: model year (2004) -> current year.
-    assert payload[0]["year"] == _query_params()["year"]
-    assert payload[0]["year"] < payload[-1]["year"]
-    expected_points = payload[-1]["year"] - _query_params()["year"] + 1
-    assert len(payload) == expected_points
+    assert response.json() == []
 
 
-def test_sentiment_score_range_is_zero_to_five():
+def test_no_provider_returns_no_listings():
+    response = client.get("/current-listings", params=_query_params())
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_no_provider_sentiment_is_unavailable():
     response = client.get("/sentiment-score", params=_query_params())
     assert response.status_code == 200
     payload = response.json()
-    assert 0 <= payload["score"] <= 5
+    assert payload["available"] is False
+    assert payload["mentions_analyzed"] == 0
 
 
-def test_undervalued_listing_rules():
+def test_analysis_without_provider_reports_unavailable_not_404():
+    response = client.get("/analysis", params=_query_params())
+    assert response.status_code == 200
+    payload = response.json()
+    availability = payload["data_availability"]
+    assert availability["historical_prices"] is False
+    assert availability["current_listings"] is False
+    assert availability["warnings"]
+    assert payload["historical_prices"] == []
+    assert payload["current_listings"] == []
+    assert payload["prediction"] == []
+    assert payload["data_quality"]["confidence_level"] == "Unavailable"
+
+
+# ---------------------------------------------------------------------------
+# Real-data pipeline: provider data is surfaced faithfully (no fabrication)
+# ---------------------------------------------------------------------------
+
+def test_provider_listings_use_exact_advert_urls(fake_provider):
+    response = client.get("/current-listings", params=_query_params())
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload
+    for item in payload:
+        assert item["currency"] == "GBP"
+        # Exact advert detail pages, not generic search pages.
+        assert item["url"].startswith("https://www.autotrader.co.uk/car-details/")
+        assert "example.com" not in item["url"]
+
+
+def test_provider_historical_prices_include_source_metadata(fake_provider):
+    response = client.get("/historical-prices", params=_query_params())
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload
+    for point in payload:
+        assert point["price_type"] == "sold"
+        assert point["source_name"]
+        assert point["source_url"].startswith("https://")
+        assert point["currency"] == "GBP"
+
+
+def test_provider_sentiment_uses_real_sources(fake_provider):
+    sentiment = get_sentiment_score("Porsche", "911", 2004)
+    assert sentiment["available"] is True
+    assert sentiment["mentions_analyzed"] > 0
+    assert 0 < sentiment["score"] <= 5
+
+
+def test_analysis_includes_market_discussions(fake_provider):
+    response = client.get("/analysis", params=_query_params())
+    assert response.status_code == 200
+    payload = response.json()
+    discussions = payload["market_discussions"]
+    assert discussions
+    assert discussions[0]["url"].startswith("https://")
+    assert discussions[0]["price_outlook"] == "appreciating"
+
+
+def test_analysis_passes_variant_through(fake_provider):
+    params = {**_query_params(), "variant": "Carrera S"}
+    response = client.get("/analysis", params=params)
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["query"]["variant"] == "Carrera S"
+    # Listings should reflect the requested variant from the provider.
+    assert payload["current_listings"]
+    assert payload["current_listings"][0]["variant"] == "Carrera S"
+
+
+def test_undervalued_listings_based_on_real_averages(fake_provider):
     response = client.get("/undervalued-listings", params=_query_params())
     assert response.status_code == 200
     payload = response.json()
-
-    listings_response = client.get("/current-listings", params=_query_params())
-    listings = listings_response.json()
-    assert listings
+    listings = client.get("/current-listings", params=_query_params()).json()
     avg = sum(item["price"] for item in listings) / len(listings)
-
     assert payload
     for item in payload:
         assert item["clean_title"] is True
@@ -49,65 +167,34 @@ def test_undervalued_listing_rules():
 def test_undervalued_endpoint_handles_empty_listings(monkeypatch):
     from car_investment_tracker import main
 
-    monkeypatch.setattr(main, "get_current_listings", lambda brand, model, year: [])
+    monkeypatch.setattr(
+        main, "get_current_listings", lambda brand, model, year, variant=None: []
+    )
     response = client.get("/undervalued-listings", params=_query_params())
     assert response.status_code == 200
     assert response.json() == []
 
 
-def test_current_listings_use_uk_currency_and_working_links():
-    response = client.get("/current-listings", params=_query_params())
+def test_market_comparables_only_returns_sold(fake_provider):
+    # The fake provider exposes only "asking" listings, so no sold comparables.
+    response = client.get("/market-comparables", params=_query_params())
     assert response.status_code == 200
     payload = response.json()
-    assert payload
-
-    for item in payload:
-        assert item["currency"] == "GBP"
-        assert item["url"].startswith("https://")
-        assert "example.com" not in item["url"]
+    assert payload["available"] is False
+    assert payload["comparables"] == []
 
 
-def test_listing_links_point_to_marketplace_search_results():
-    """Links should resolve to real marketplace search pages (not fake detail IDs)."""
-    response = client.get("/current-listings", params=_query_params())
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload
-
-    allowed_hosts = (
-        "https://www.autotrader.co.uk/car-search",
-        "https://www.motors.co.uk/search/car/",
-        "https://www.ebay.co.uk/sch/",
-        "https://www.pistonheads.com/classifieds",
-    )
-    for item in payload:
-        url = item["url"]
-        assert any(url.startswith(prefix) for prefix in allowed_hosts), url
-        # The old fabricated car-detail style links must not return.
-        assert "/car-details/" not in url
-        assert "/buy/listing/" not in url
-        # Search links should carry the make so the user lands on relevant results.
-        assert str(_query_params()["model"]) in url
-
+# ---------------------------------------------------------------------------
+# Pure prediction / inflation unit tests (provider-independent)
+# ---------------------------------------------------------------------------
 
 def test_consecutive_depreciation_does_not_forecast_sudden_rise():
-    """A car depreciating for years should not suddenly be forecast to rise.
-
-    Mirrors the Ferrari Roma case: steady decline + weak price sentiment must
-    keep the forecast trending downward rather than spiking upward.
-    """
-    from car_investment_tracker.services.prediction import predict_prices
-
     declining = [200000, 185000, 170000, 158000, 150000, 145000]
-    listing_avg = 148000
-    weak_sentiment = 1.5  # below neutral -> not bullish
-    forecast, explanation = predict_prices(declining, listing_avg, weak_sentiment)
+    forecast, explanation = predict_prices(declining, 148000, 1.5)
 
     assert forecast
-    # No predicted year should exceed the last historical price.
     last_historical = declining[-1]
     assert all(p.predicted_price <= last_historical for p in forecast)
-    # Forecast should be non-increasing (no sudden upward jump).
     prices = [p.predicted_price for p in forecast]
     assert prices == sorted(prices, reverse=True)
     assert explanation.driven_by_history is True
@@ -115,9 +202,6 @@ def test_consecutive_depreciation_does_not_forecast_sudden_rise():
 
 
 def test_strong_bullish_sentiment_can_lift_forecast():
-    """With strong price-outlook sentiment, a rising car may be forecast upward."""
-    from car_investment_tracker.services.prediction import predict_prices
-
     rising = [100000, 105000, 112000, 120000, 130000]
     forecast, explanation = predict_prices(rising, 128000, 4.5)
     assert forecast
@@ -125,98 +209,34 @@ def test_strong_bullish_sentiment_can_lift_forecast():
 
 
 def test_inflation_adjustment_increases_past_prices():
-    """Test that inflation adjustment makes past prices higher in current value."""
-    current_year = 2026
-    five_years_ago = 2021
-    adjustment = _inflation_adjustment(five_years_ago, current_year)
-    # 2.5% annual inflation over 5 years should increase value
+    adjustment = _inflation_adjustment(2021, 2026)
     assert adjustment > 1.0
-    # Should be approximately 1.025^5 ≈ 1.131
     assert 1.1 < adjustment < 1.15
 
 
-def test_sentiment_score_uses_weighted_terms():
-    """Test sentiment scoring with improved weighted terms."""
-    sentiment = get_sentiment_score("Porsche", "911", 2004)
-    assert sentiment["score"] > 0
-    assert sentiment["score"] <= 5
-    assert sentiment["mentions_analyzed"] > 0
-
-
 def test_momentum_calculation_reflects_recent_trend():
-    """Test that momentum calculation reflects recent price changes."""
-    # Test with increasing prices
-    increasing_prices = [100, 110, 120, 130, 140]
-    momentum = _calculate_recent_momentum(increasing_prices)
-    assert momentum > 0, "Increasing prices should have positive momentum"
-    
-    # Test with decreasing prices
-    decreasing_prices = [140, 130, 120, 110, 100]
-    momentum = _calculate_recent_momentum(decreasing_prices)
-    assert momentum < 0, "Decreasing prices should have negative momentum"
-    
-    # Test with flat prices
-    flat_prices = [100, 100, 100, 100, 100]
-    momentum = _calculate_recent_momentum(flat_prices)
-    assert momentum == 0, "Flat prices should have zero momentum"
+    assert _calculate_recent_momentum([100, 110, 120, 130, 140]) > 0
+    assert _calculate_recent_momentum([140, 130, 120, 110, 100]) < 0
+    assert _calculate_recent_momentum([100, 100, 100, 100, 100]) == 0
 
 
 def test_prediction_includes_explanation():
-    """Test that prediction returns both forecast and explanation."""
     historical = [15000, 14500, 14000, 13500, 13000]
     forecast, explanation = predict_prices(historical, 12000, 2.5)
-    
-    assert len(forecast) > 0, "Forecast should have predictions"
+
+    assert len(forecast) > 0
     assert explanation.historical_weight == 0.6
     assert explanation.listing_weight == 0.4
     assert explanation.inflation_adjusted is True
     assert "momentum" in explanation.model_type.lower()
 
 
-def test_analysis_endpoint_includes_transparency():
-    """Test that analysis endpoint includes model transparency explanation."""
+def test_analysis_endpoint_includes_transparency(fake_provider):
     response = client.get("/analysis", params=_query_params())
     assert response.status_code == 200
     payload = response.json()
-    
+
     assert "prediction_explanation" in payload
+    assert payload["prediction_explanation"] is not None
     assert "model_type" in payload["prediction_explanation"]
-    assert "trend_momentum" in payload["prediction_explanation"]
     assert "inflation_adjusted" in payload["prediction_explanation"]
-
-
-def test_supercar_pricing_is_realistic():
-    """Halo/supercar models should be valued far above the old generic ~£3k-£38k band."""
-    from car_investment_tracker.services.current_listings import estimate_market_value_gbp
-
-    f40 = estimate_market_value_gbp("Ferrari", "F40", 1990)
-    countach = estimate_market_value_gbp("Lamborghini", "Countach", 1985)
-    sl300 = estimate_market_value_gbp("Mercedes-Benz", "300 SL", 1955)
-
-    # These collectible cars are worth hundreds of thousands, not tens of thousands.
-    assert f40 > 200_000
-    assert countach > 200_000
-    assert sl300 > 200_000
-
-
-def test_brand_multiplier_keys_match_catalog():
-    """Ferrari, Lamborghini and Mercedes-Benz must resolve to their fallback premium."""
-    from car_investment_tracker.services.current_listings import BRAND_PRICE_MULTIPLIERS
-
-    assert "ferrari" in BRAND_PRICE_MULTIPLIERS
-    assert "lamborghini" in BRAND_PRICE_MULTIPLIERS
-    # Canonical catalog make is "Mercedes-Benz" -> normalized key must match.
-    assert "mercedes-benz" in BRAND_PRICE_MULTIPLIERS
-
-
-def test_classic_car_appreciates_over_its_life():
-    """An old classic should be worth more today than near the bottom of its depreciation."""
-    response = client.get(
-        "/historical-prices",
-        params={"brand": "Jaguar", "model": "E-Type", "year": 1965},
-    )
-    assert response.status_code == 200
-    payload = response.json()
-    prices = [p["average_price"] for p in payload]
-    # Latest value should exceed the cheapest (post-depreciation trough) point.
-    assert prices[-1] > min(prices)

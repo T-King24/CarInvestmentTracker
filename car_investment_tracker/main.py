@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from car_investment_tracker.car_data import get_makes, get_models, get_years
+from car_investment_tracker.car_data import get_makes, get_models, get_variants, get_years
 from car_investment_tracker.services.current_listings import get_current_listings
 from car_investment_tracker.services.historical_data import get_historical_prices
 from car_investment_tracker.services.listing_evaluation import find_undervalued_listings
@@ -15,6 +16,7 @@ from car_investment_tracker.services.prediction import predict_prices
 from car_investment_tracker.services.sentiment import get_sentiment_score
 from car_investment_tracker.services.market_metrics import calculate_volatility_metrics
 from car_investment_tracker.services.market_comparables import get_market_comparables
+from car_investment_tracker.services.market_discussions import get_market_discussions
 from car_investment_tracker.services.ownership_costs import calculate_ownership_costs
 from car_investment_tracker.services.spec_adjustments import calculate_spec_adjustments, adjust_prices_for_specs
 from car_investment_tracker.services.market_events import get_market_events
@@ -24,7 +26,10 @@ from car_investment_tracker.services.export_service import export_to_csv, export
 from car_investment_tracker.services.anomaly_detection import detect_listing_anomalies
 from car_investment_tracker.services.macro_economics import get_macroeconomic_context, calculate_economic_price_adjustment
 from car_investment_tracker.services.rarity_projection import calculate_rarity_projection
-from car_investment_tracker.models import DataQualityIndicator
+from car_investment_tracker.services.brand_themes import get_all_brand_themes, get_brand_theme
+from car_investment_tracker.services.providers import get_market_provider
+from car_investment_tracker.services.providers.config import load_config
+from car_investment_tracker.models import DataAvailability, DataQualityIndicator
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +55,26 @@ def index() -> FileResponse:
     return FileResponse(static_dir / "index.html")
 
 
+@app.get("/healthz")
+def healthz() -> dict:
+    """Liveness/readiness probe.
+
+    Returns service status and whether a live market-data provider is
+    configured. ``data_mode`` is ``"live"`` when an external provider is wired
+    up via environment variables, otherwise ``"null"`` (catalog works, but
+    market data is reported as unavailable rather than fabricated).
+    """
+    config = load_config()
+    provider = get_market_provider()
+    return {
+        "status": "ok",
+        "version": app.version,
+        "data_mode": "live" if config.is_live else "null",
+        "provider": getattr(provider, "name", provider.__class__.__name__),
+        "time": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @app.get("/dropdown-makes")
 def dropdown_makes() -> list[str]:
     """Get all available car makes for dropdown selection."""
@@ -73,20 +98,34 @@ def dropdown_years(make: str = Query(min_length=1), model: str = Query(min_lengt
         raise HTTPException(status_code=404, detail=f"No years found for {make} {model}")
     return years
 
+
+@app.get("/dropdown-variants")
+def dropdown_variants(make: str = Query(min_length=1), model: str = Query(min_length=1)) -> list[str]:
+    """Get all available variants/derivatives for a given make and model."""
+    return get_variants(make, model)
+
+
+@app.get("/brand-themes")
+def brand_themes() -> dict:
+    """Get the per-brand colour themes applied by the UI when a make is selected."""
+    return get_all_brand_themes()
+
+
 @app.get("/historical-prices")
 def historical_prices(
     brand: str = Query(min_length=1),
     model: str = Query(min_length=1),
     year: int = Query(ge=1900),
+    variant: str | None = Query(default=None),
     inflation_adjusted: bool = Query(default=True, description="Return inflation-adjusted prices (default) or nominal"),
 ):
     _validate_vehicle_params(brand, model, year)
-    prices = get_historical_prices(brand, model, year)
-    
+    prices = get_historical_prices(brand, model, year, variant)
+
     if not inflation_adjusted:
         # Return nominal prices instead
         return [{"year": p.year, "average_price": p.nominal_price} for p in prices]
-    
+
     return prices
 
 
@@ -95,9 +134,10 @@ def current_listings(
     brand: str = Query(min_length=1),
     model: str = Query(min_length=1),
     year: int = Query(ge=1900),
+    variant: str | None = Query(default=None),
 ):
     _validate_vehicle_params(brand, model, year)
-    return get_current_listings(brand, model, year)
+    return get_current_listings(brand, model, year, variant)
 
 
 @app.get("/sentiment-score")
@@ -105,9 +145,10 @@ def sentiment_score(
     brand: str = Query(min_length=1),
     model: str = Query(min_length=1),
     year: int = Query(ge=1900),
+    variant: str | None = Query(default=None),
 ):
     _validate_vehicle_params(brand, model, year)
-    return get_sentiment_score(brand, model, year)
+    return get_sentiment_score(brand, model, year, variant)
 
 
 @app.get("/sentiment-sources")
@@ -115,10 +156,26 @@ def sentiment_sources(
     brand: str = Query(min_length=1),
     model: str = Query(min_length=1),
     year: int = Query(ge=1900),
+    variant: str | None = Query(default=None),
 ):
     """Get detailed sentiment breakdown by source (forums, auctions, news, social media)."""
     _validate_vehicle_params(brand, model, year)
-    return get_sentiment_source_breakdown(brand, model, year)
+    return get_sentiment_source_breakdown(brand, model, year, variant)
+
+
+@app.get("/market-discussions")
+def market_discussions(
+    brand: str = Query(min_length=1),
+    model: str = Query(min_length=1),
+    year: int = Query(ge=1900),
+    variant: str | None = Query(default=None),
+):
+    """Get real news articles and forum threads discussing the car's pricing outlook."""
+    _validate_vehicle_params(brand, model, year)
+    return {
+        "query": {"brand": brand, "model": model, "year": year, "variant": variant},
+        "discussions": get_market_discussions(brand, model, year, variant),
+    }
 
 
 @app.get("/prediction")
@@ -126,15 +183,16 @@ def prediction(
     brand: str = Query(min_length=1),
     model: str = Query(min_length=1),
     year: int = Query(ge=1900),
+    variant: str | None = Query(default=None),
     transmission: str = Query(default="Automatic"),
     trim_level: str = Query(default="Standard"),
     condition: str = Query(default="Average"),
     mileage_bracket: str = Query(default="Normal"),
 ):
     _validate_vehicle_params(brand, model, year)
-    historical = get_historical_prices(brand, model, year)
-    listings = get_current_listings(brand, model, year)
-    sentiment = get_sentiment_score(brand, model, year)
+    historical = get_historical_prices(brand, model, year, variant)
+    listings = get_current_listings(brand, model, year, variant)
+    sentiment = get_sentiment_score(brand, model, year, variant)
 
     if not historical or not listings:
         raise HTTPException(status_code=404, detail="Insufficient data for prediction")
@@ -191,17 +249,20 @@ def market_comparables(
     brand: str = Query(min_length=1),
     model: str = Query(min_length=1),
     year: int = Query(ge=1900),
+    variant: str | None = Query(default=None),
 ):
-    """Get recent comparable sales for the vehicle."""
+    """Get recent comparable *sold* transactions for the vehicle.
+
+    Returns an empty list when the provider exposes no real sold transactions,
+    rather than fabricating comparable sales.
+    """
     _validate_vehicle_params(brand, model, year)
-    comparables = get_market_comparables(brand, model, year)
-    
-    if not comparables:
-        raise HTTPException(status_code=404, detail="No comparable sales found")
-    
+    comparables = get_market_comparables(brand, model, year, variant)
+
     return {
         "comparables": comparables,
-        "query": {"brand": brand, "model": model, "year": year},
+        "available": bool(comparables),
+        "query": {"brand": brand, "model": model, "year": year, "variant": variant},
     }
 
 
@@ -497,6 +558,7 @@ def analysis(
     brand: str = Query(min_length=1),
     model: str = Query(min_length=1),
     year: int = Query(ge=1900),
+    variant: str | None = Query(default=None),
     transmission: str = Query(default="Automatic"),
     trim_level: str = Query(default="Standard"),
     condition: str = Query(default="Average"),
@@ -505,66 +567,97 @@ def analysis(
     inflation_adjusted: bool = Query(default=True),
 ):
     _validate_vehicle_params(brand, model, year)
+
+    provider = get_market_provider()
+    provider_name = getattr(provider, "name", "unconfigured")
+    fetched_at = datetime.now(timezone.utc).isoformat()
+
     try:
-        historical = get_historical_prices(brand, model, year)
-        listings = get_current_listings(brand, model, year)
-        sentiment = get_sentiment_score(brand, model, year)
+        historical = get_historical_prices(brand, model, year, variant)
+        listings = get_current_listings(brand, model, year, variant)
+        sentiment = get_sentiment_score(brand, model, year, variant)
+        sentiment_breakdown = get_sentiment_source_breakdown(brand, model, year, variant)
+        discussions = get_market_discussions(brand, model, year, variant)
         undervalued = find_undervalued_listings(listings)
-        
-        if not historical or not listings:
-            raise HTTPException(status_code=404, detail="Insufficient data for analysis")
-        
-        # Select price data based on inflation_adjusted flag
-        if inflation_adjusted:
-            historical_prices = [point.average_price for point in historical]
-        else:
-            historical_prices = [point.nominal_price for point in historical]
-        
-        # Apply spec adjustments
-        adjusted_historical = adjust_prices_for_specs(
-            historical_prices,
-            transmission=transmission,
-            trim_level=trim_level,
-            condition=condition,
-            mileage_bracket=mileage_bracket,
+
+        # Build data-availability transparency. Real data may be partially or
+        # wholly unavailable; we never fabricate values to fill the gaps.
+        warnings: list[str] = []
+        if not historical:
+            warnings.append("No real historical sold-price data is available for this vehicle.")
+        if not listings:
+            warnings.append("No live listings are available for this vehicle from the configured provider.")
+        if not sentiment.get("available"):
+            warnings.append("No market sentiment/discussion sources are available for this vehicle.")
+        if provider_name == "unconfigured":
+            warnings.append(
+                "No live data provider is configured. Set CIT_DATA_PROVIDER and the "
+                "feed URLs to fetch real prices, listings and discussions."
+            )
+
+        availability = DataAvailability(
+            provider=provider_name,
+            fetched_at=fetched_at,
+            historical_prices=bool(historical),
+            current_listings=bool(listings),
+            sentiment=bool(sentiment.get("available")),
+            discussions=bool(discussions),
+            warnings=warnings,
         )
-        
-        listing_avg = sum(item.price for item in listings) / len(listings)
-        forecast, explanation = predict_prices(
-            historical_prices=adjusted_historical,
-            listing_avg=listing_avg,
-            sentiment_score=float(sentiment["score"]),
-        )
-        
-        # Calculate volatility metrics
-        volatility = calculate_volatility_metrics([point.average_price for point in historical])
-        
-        # Get market comparables
-        comparables_data = get_market_comparables(brand, model, year)
-        
-        # Get market events
+
+        # Forecasting requires at least real historical data and listings. Without
+        # them we return a structured "data unavailable" response instead of a
+        # synthetic forecast.
+        forecast = []
+        explanation = None
+        volatility = None
+        comparables_data = []
+        listing_anomalies = []
+        econ_adjustment = None
+        spec_adjustments_info = None
+        listing_avg = 0.0
+
+        if historical and listings:
+            if inflation_adjusted:
+                historical_prices = [point.average_price for point in historical]
+            else:
+                historical_prices = [point.nominal_price for point in historical]
+
+            adjusted_historical = adjust_prices_for_specs(
+                historical_prices,
+                transmission=transmission,
+                trim_level=trim_level,
+                condition=condition,
+                mileage_bracket=mileage_bracket,
+            )
+
+            listing_avg = sum(item.price for item in listings) / len(listings)
+            forecast, explanation = predict_prices(
+                historical_prices=adjusted_historical,
+                listing_avg=listing_avg,
+                sentiment_score=float(sentiment["score"]),
+            )
+
+            volatility = calculate_volatility_metrics([point.average_price for point in historical])
+            comparables_data = get_market_comparables(brand, model, year, variant)
+            listing_anomalies = detect_listing_anomalies(
+                listings, market_price=forecast[0].predicted_price if forecast else None
+            )
+            econ_adjustment = calculate_economic_price_adjustment(base_price=listing_avg)
+            spec_adjustments_info = calculate_spec_adjustments(
+                base_price=listing_avg,
+                transmission=transmission,
+                trim_level=trim_level,
+                condition=condition,
+                mileage_bracket=mileage_bracket,
+            )
+
+        # These reference datasets do not depend on live market availability.
         start_year = 2026 - 20
         events = get_market_events(brand, model, start_year, 2026)
-        
-        # Get sentiment source breakdown
-        sentiment_breakdown = get_sentiment_source_breakdown(brand, model, year)
-        
-        # Get rarity projection
         rarity_proj = calculate_rarity_projection(brand, model, year)
-        
-        # Get anomalies
-        listing_anomalies = detect_listing_anomalies(listings, market_price=forecast[0].predicted_price if forecast else None)
-        
-        # Get macro-economic context
         macro_context = get_macroeconomic_context()
-        
-        # Calculate economic price adjustment
-        listing_avg = sum(item.price for item in listings) / len(listings)
-        econ_adjustment = calculate_economic_price_adjustment(
-            base_price=listing_avg,
-        )
-        
-        # Calculate ownership costs if price provided
+
         ownership = None
         if vehicle_price and vehicle_price > 0:
             ownership = calculate_ownership_costs(
@@ -572,57 +665,64 @@ def analysis(
                 vehicle_brand=brand,
                 vehicle_year=year,
             )
-        
-        
-        # Spec adjustments info
-        spec_adjustments_info = calculate_spec_adjustments(
-            base_price=listing_avg,
-            transmission=transmission,
-            trim_level=trim_level,
-            condition=condition,
-            mileage_bracket=mileage_bracket,
-        )
-        
+
     except HTTPException:
         raise
     except Exception as exc:  # pragma: no cover
         logger.exception("Analysis failed for %s %s %s", brand, model, year)
         raise HTTPException(status_code=500, detail="Unable to complete analysis: processing_error") from exc
 
-    # Determine confidence level based on data availability
+    # Determine confidence level based on real data availability. Confidence
+    # scoring rewards more sold-price history, more live listings, recent data
+    # and available sentiment; sparse data yields low confidence.
     historical_count = len(historical)
     listings_count = len(listings)
-    if historical_count >= 15 and listings_count >= 5:
+    discussions_count = len(discussions)
+
+    if not historical or not listings:
+        confidence = "Unavailable"
+        consistency_note = "Insufficient real data to produce a confident valuation."
+    elif historical_count >= 15 and listings_count >= 5 and discussions_count >= 3:
         confidence = "High"
-        consistency_note = "Comprehensive historical data and current market listings"
-    elif historical_count >= 10 and listings_count >= 3:
+        consistency_note = "Comprehensive sold-price history, live listings and discussion coverage"
+    elif historical_count >= 8 and listings_count >= 3:
         confidence = "Medium"
-        consistency_note = "Adequate historical data with moderate market coverage"
+        consistency_note = "Adequate sold-price history with moderate market coverage"
     else:
         confidence = "Low"
-        consistency_note = "Limited historical data or current market listings"
+        consistency_note = "Limited real sold-price history or live listings"
 
     data_quality = DataQualityIndicator(
         historical_data_points=historical_count,
         current_listings_count=listings_count,
-        data_consistency="Consistent: historical prices inflation-adjusted; predictions protected against unrealistic spikes via ±15% sentiment clamping and price bounds",
+        data_consistency=(
+            "Real sold-price history (inflation-adjusted) anchors valuation; live "
+            "listings provide current market context; predictions are clamped to "
+            "realistic bounds. No values are fabricated when data is missing."
+        ),
         confidence_level=confidence,
         notes=consistency_note,
     )
 
     return {
-        "query": {"brand": brand, "model": model, "year": year},
+        "query": {"brand": brand, "model": model, "year": year, "variant": variant},
         "summary": {
-            "sentiment_score": f"{sentiment['score']}/5",
+            "sentiment_score": f"{sentiment['score']}/5" if sentiment.get("available") else "Unavailable",
             "prediction_confidence": confidence,
-            "price_trend": "Estimated based on historical data with sentiment adjustment",
+            "price_trend": (
+                "Based on real sold-price history with sentiment adjustment"
+                if forecast else "Unavailable: insufficient real market data"
+            ),
         },
+        "data_availability": availability,
         "sentiment": sentiment,
         "sentiment_breakdown": sentiment_breakdown,
+        "market_discussions": discussions,
         "historical_prices": historical,
         "prediction": forecast,
         "prediction_explanation": explanation,
         "current_listing_average": round(listing_avg, 2),
+        "current_listings": listings,
         "undervalued_listings": undervalued,
         "listing_anomalies": listing_anomalies,
         "volatility_metrics": volatility,
@@ -635,22 +735,46 @@ def analysis(
         "economic_price_adjustment": econ_adjustment,
         "data_quality": data_quality,
         "data_sources": {
-            "historical": "Market sales aggregators / fallback model (all prices inflation-adjusted to current year GBP)",
-            "listings": "Marketplace APIs where available; compliant scraping where permitted (current market prices)",
-            "sentiment": f"Forums, Reddit, owner communities, and review sites (weighted analysis of {sentiment['mentions_analyzed']} mentions)",
+            "provider": provider_name,
+            "historical": "Real sold-price / auction-result feeds (inflation-adjusted to current year GBP)",
+            "listings": "Live adverts from the configured provider (e.g. Auto Trader), each linking to the exact advert",
+            "sentiment": (
+                f"Real news/forum/auction/social discussions (analysis of {sentiment['mentions_analyzed']} sources)"
+                if sentiment.get("available") else "No real sentiment sources available"
+            ),
         },
         "methodology": {
             "forecast_model": "Linear regression with momentum smoothing",
+            "valuation_anchor": "Sold-price history is the primary valuation anchor; live listings provide current supply/demand context",
             "spike_prevention": "Predicted prices constrained between -30% and +35% of baseline to prevent unrealistic jumps",
-            "inflation_adjustment": "All historical data converted to current year GBP for fair long-term comparison",
-            "sentiment_impact": "Sentiment score (0-5) adjusted to ±15% multiplier on forecast (clamped for stability)",
+            "inflation_adjustment": "Real historical prices converted to current year GBP for fair long-term comparison",
+            "sentiment_impact": "Sentiment score (0-5) adjusted to ±10% multiplier on forecast (clamped for stability)",
             "confidence_intervals": "±10% bands around predictions to show forecast uncertainty",
-            "spec_adjustments": "Prices adjusted for transmission, trim level, condition, and mileage bracket",
-            "volatility_tracking": "Coefficient of variation and volatility score (1-10) indicate market stability",
-            "event_markers": "Major market events annotated to explain price movements",
-            "sentiment_sources": "Weighted sentiment from forums (30%), auctions (35%), news (20%), and social media (15%)",
-            "anomaly_detection": "Z-score based statistical analysis to identify outlier listings",
-            "rarity_analysis": "Production volume and survival rate modeling for long-term value projection",
-            "macro_economic": "Economic indicators and their historical correlations with luxury vehicle valuations",
+            "no_fabrication": "When real data is unavailable, results are reported as unavailable rather than estimated",
         },
     }
+
+
+
+def run() -> None:
+    """Production entrypoint.
+
+    Binds to ``0.0.0.0`` and honours the ``PORT`` environment variable used by
+    most hosting platforms (Railway, Render, Heroku, Fly, Cloud Run, ...).
+    """
+    import os
+
+    import uvicorn
+
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run(
+        "car_investment_tracker.main:app",
+        host="0.0.0.0",
+        port=port,
+        proxy_headers=True,
+        forwarded_allow_ips="*",
+    )
+
+
+if __name__ == "__main__":
+    run()

@@ -1,125 +1,99 @@
 from __future__ import annotations
 
-from car_investment_tracker.models import SentimentSourceBreakdown
+from car_investment_tracker.models import MarketDiscussion, SentimentSourceBreakdown
 from car_investment_tracker.services.cache import cache
+from car_investment_tracker.services.providers import get_market_provider
+from car_investment_tracker.services.sentiment import _score_discussion
 
-# Improved sentiment terms with weighted importance
-POSITIVE_TERMS = {
-    "reliable": 2.0,
-    "iconic": 2.0,
-    "excellent": 2.5,
-    "durable": 2.0,
-    "enthusiast": 1.5,
-    "strong": 1.5,
-    "collectible": 2.5,
-    "legendary": 2.5,
-    "timeless": 2.0,
-    "sought-after": 2.0,
-}
-
-NEGATIVE_TERMS = {
-    "expensive": -1.5,
-    "problem": -2.0,
-    "rust": -2.5,
-    "weak": -1.5,
-    "overpriced": -2.5,
-    "unreliable": -2.5,
-    "failing": -2.5,
-    "depreciate": -1.5,
-}
+# Keyword -> source category. Used to bucket real discussion sources so the
+# breakdown reflects where each opinion actually came from.
+_FORUM_HINTS = ("pistonheads", "forum", "reddit", "owners", "club", "community")
+_AUCTION_HINTS = (
+    "auction",
+    "bonhams",
+    "sotheby",
+    "collecting cars",
+    "bring a trailer",
+    "car & classic",
+    "hagerty price",
+    "the market",
+)
+_SOCIAL_HINTS = ("twitter", "instagram", "youtube", "facebook", "tiktok", " x ")
+_NEWS_HINTS = ("autocar", "evo", "top gear", "motor1", "carwow", "hagerty", "news", "review")
 
 
-def _calculate_sentiment_from_text(texts: list[str]) -> float:
-    """Calculate sentiment score from list of texts."""
-    score = 0.0
-    for text in texts:
-        words = {token.strip(".,").lower() for token in text.split()}
-        for word, weight in POSITIVE_TERMS.items():
-            if word in words:
-                score += weight
-        for word, weight in NEGATIVE_TERMS.items():
-            if word in words:
-                score += weight
-    
-    normalized = max(0.0, min(5.0, round(((score + 15) / 30) * 5, 2)))
-    return normalized
+def _categorise(source: str) -> str:
+    text = f" {source.strip().lower()} "
+    if any(hint in text for hint in _AUCTION_HINTS):
+        return "auction"
+    if any(hint in text for hint in _FORUM_HINTS):
+        return "forums"
+    if any(hint in text for hint in _SOCIAL_HINTS):
+        return "social"
+    if any(hint in text for hint in _NEWS_HINTS):
+        return "news"
+    return "news"
+
+
+def _avg(scores: list[float]) -> float:
+    return round(sum(scores) / len(scores), 2) if scores else 0.0
 
 
 @cache.cached
-def get_sentiment_source_breakdown(brand: str, model: str, year: int) -> SentimentSourceBreakdown:
-    """Get detailed sentiment breakdown by source.
-    
-    Returns sentiment scores from different sources: forums, auctions, news, social media.
-    Each source is analyzed separately and weighted.
-    
-    Args:
-        brand: Vehicle brand
-        model: Vehicle model
-        year: Vehicle year
-        
-    Returns:
-        SentimentSourceBreakdown with per-source sentiment scores
+def get_sentiment_source_breakdown(
+    brand: str, model: str, year: int, variant: str | None = None
+) -> SentimentSourceBreakdown:
+    """Break real discussion sentiment down by source type.
+
+    Buckets the provider's real news/forum/auction/social discussions and scores
+    each bucket. When no real sources are available, all scores are zero and
+    ``available`` is ``False`` (nothing is fabricated).
     """
-    
-    # Forum/community mentions (typically balanced, detailed discussions)
-    forum_mentions = [
-        f"The {brand} {model} remains an iconic enthusiast choice with strong resale value.",
-        f"Forum users debate if current prices are overpriced.",
-        f"Enthusiast community rates this model highly for driving experience.",
-        f"Common issues reported by owners in online forums.",
-        f"Collectors seek out this legendary model.",
-    ]
-    forum_score = _calculate_sentiment_from_text(forum_mentions)
-    
-    # Auction commentary (transaction-based, market-driven)
-    auction_mentions = [
-        f"Used market shows strong demand from collectors.",
-        f"Auction prices remain stable for clean examples.",
-        f"Recent auction results show market appreciation.",
-        f"Some depreciation observed in rough condition examples.",
-        f"Premium paid for original low-mileage examples.",
-    ]
-    auction_score = _calculate_sentiment_from_text(auction_mentions)
-    
-    # News articles (expert opinions, broader context)
-    news_mentions = [
-        f"Reviewers describe it as reliable and durable with timeless appeal.",
-        f"Expert reviewers praise the iconic design and performance.",
-        f"Market analysis shows strong collector interest in this {year} model.",
-        f"Insurance costs are expensive for performance variants.",
-        f"This model is excellent for long-term investment potential.",
-    ]
-    news_score = _calculate_sentiment_from_text(news_mentions)
-    
-    # Social media (real-time, diverse opinions)
-    social_mentions = [
-        f"Owners say maintenance can be expensive on the {year} generation.",
-        f"Some communities report rust problems in wet climates.",
-        f"Parts availability can be problematic for older generations.",
-        f"The {brand} {model} offers exceptional value compared to competitors.",
-        f"Build quality and reliable performance praised by owners.",
-    ]
-    social_score = _calculate_sentiment_from_text(social_mentions)
-    
-    # Calculate weighted overall score
-    # Weights: Forums 30%, Auctions 35% (transaction data most reliable), News 20%, Social 15%
-    overall_score = (
-        forum_score * 0.30 +
-        auction_score * 0.35 +
-        news_score * 0.20 +
-        social_score * 0.15
-    )
-    overall_score = round(max(0.0, min(5.0, overall_score)), 2)
-    
+    provider = get_market_provider()
+    discussions: list[MarketDiscussion] = provider.fetch_discussions(brand, model, year, variant)
+
+    buckets: dict[str, list[float]] = {"forums": [], "auction": [], "news": [], "social": []}
+    for discussion in discussions:
+        score = _score_discussion(discussion)
+        if score is None:
+            continue
+        buckets[_categorise(discussion.source)].append(score)
+
+    forum_score = _avg(buckets["forums"])
+    auction_score = _avg(buckets["auction"])
+    news_score = _avg(buckets["news"])
+    social_score = _avg(buckets["social"])
+
+    total = sum(len(v) for v in buckets.values())
+    if total == 0:
+        return SentimentSourceBreakdown(
+            forums_score=0.0, forums_mentions=0,
+            auction_score=0.0, auction_mentions=0,
+            news_score=0.0, news_mentions=0,
+            social_score=0.0, social_mentions=0,
+            overall_score=0.0, total_mentions=0, available=False,
+        )
+
+    # Weight only the buckets that actually have data so a missing source type
+    # doesn't drag the overall score toward zero.
+    weights = {"forums": 0.30, "auction": 0.35, "news": 0.20, "social": 0.15}
+    weighted_sum = 0.0
+    weight_total = 0.0
+    for name, score in (
+        ("forums", forum_score),
+        ("auction", auction_score),
+        ("news", news_score),
+        ("social", social_score),
+    ):
+        if buckets[name]:
+            weighted_sum += score * weights[name]
+            weight_total += weights[name]
+    overall = round(weighted_sum / weight_total, 2) if weight_total else 0.0
+
     return SentimentSourceBreakdown(
-        forums_score=forum_score,
-        forums_mentions=len(forum_mentions),
-        auction_score=auction_score,
-        auction_mentions=len(auction_mentions),
-        news_score=news_score,
-        news_mentions=len(news_mentions),
-        social_score=social_score,
-        social_mentions=len(social_mentions),
-        overall_score=overall_score,
-        total_mentions=len(forum_mentions) + len(auction_mentions) + len(news_mentions) + len(social_mentions),
+        forums_score=forum_score, forums_mentions=len(buckets["forums"]),
+        auction_score=auction_score, auction_mentions=len(buckets["auction"]),
+        news_score=news_score, news_mentions=len(buckets["news"]),
+        social_score=social_score, social_mentions=len(buckets["social"]),
+        overall_score=overall, total_mentions=total, available=True,
     )
