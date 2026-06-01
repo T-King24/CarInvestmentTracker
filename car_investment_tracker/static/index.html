@@ -600,6 +600,9 @@
             ...predictionPoints.map(p => p.predicted_price)
           ];
 
+          if (typeof Chart === 'undefined') {
+            console.warn('Chart.js failed to load; skipping chart render.');
+          } else {
           if (chart) chart.destroy();
           chart = new Chart(document.getElementById('trendChart'), {
             type: 'line',
@@ -654,6 +657,7 @@
               }
             }
           });
+          }
         } catch (error) {
           const errorDiv = document.getElementById('errorMessage');
           errorDiv.textContent = 'An unexpected error occurred. Please try again.';
