@@ -87,7 +87,7 @@ def test_listing_links_point_to_marketplace_search_results():
         assert "/car-details/" not in url
         assert "/buy/listing/" not in url
         # Search links should carry the make so the user lands on relevant results.
-        assert "911" in url
+        assert str(_query_params()["model"]) in url
 
 
 def test_consecutive_depreciation_does_not_forecast_sudden_rise():
