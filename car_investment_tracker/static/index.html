@@ -598,6 +598,19 @@
             ...predictionPoints.map(p => p.predicted_price)
           ];
 
+          // Create confidence interval bounds
+          const lowerBoundSeries = [
+            ...new Array(overlapOffset).fill(null),
+            historicalPoints.length ? historicalPoints[historicalPoints.length - 1].average_price : null,
+            ...predictionPoints.map(p => p.lower_bound || p.predicted_price * 0.9)
+          ];
+          
+          const upperBoundSeries = [
+            ...new Array(overlapOffset).fill(null),
+            historicalPoints.length ? historicalPoints[historicalPoints.length - 1].average_price : null,
+            ...predictionPoints.map(p => p.upper_bound || p.predicted_price * 1.1)
+          ];
+
           // Create average line data (horizontal line at current listing average)
           const averageSeries = currentListingAverage > 0 ? new Array(labels.length).fill(currentListingAverage) : [];
 
@@ -627,6 +640,30 @@
                   borderDash: [8, 6],
                   borderWidth: 2.5,
                   spanGaps: true
+                },
+                {
+                  label: 'Confidence Upper Bound (+10%)',
+                  data: upperBoundSeries,
+                  borderColor: 'rgba(245, 158, 11, 0.3)',
+                  backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                  tension: 0.2,
+                  pointRadius: 0,
+                  borderDash: [3, 3],
+                  borderWidth: 1,
+                  spanGaps: true,
+                  fill: false
+                },
+                {
+                  label: 'Confidence Lower Bound (-10%)',
+                  data: lowerBoundSeries,
+                  borderColor: 'rgba(245, 158, 11, 0.3)',
+                  backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                  tension: 0.2,
+                  pointRadius: 0,
+                  borderDash: [3, 3],
+                  borderWidth: 1,
+                  spanGaps: true,
+                  fill: false
                 },
                 ...(currentListingAverage > 0 ? [{
                   label: 'Current Market Average (Baseline for Comparison)',
