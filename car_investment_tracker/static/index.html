@@ -38,12 +38,19 @@
         box-shadow: 0 8px 22px rgba(0, 0, 0, 0.25);
       }
       label { font-weight: 600; font-size: 0.9rem; color: #d7dde7; }
-      input, button {
+      input, select, button {
         width: 100%;
         padding: 0.7rem 0.75rem;
         margin-top: 0.45rem;
         border-radius: 10px;
         border: 1px solid var(--border);
+        background: #11151b;
+        color: var(--text);
+      }
+      select {
+        cursor: pointer;
+      }
+      select option {
         background: #11151b;
         color: var(--text);
       }
@@ -147,15 +154,15 @@
       <div class="topbar">
         <div>
           <h1>Investment Car Tracker</h1>
-          <p class="small">Track 20-year value movement (inflation-adjusted), forecast future pricing, and spot undervalued listings.</p>
+          <p class="small">Track value movement from the model year onwards (inflation-adjusted), forecast future pricing, and spot undervalued listings.</p>
         </div>
       </div>
 
       <div class="card">
         <div class="grid">
-          <label>Brand <input id="brand" value="Porsche" aria-label="Brand" /></label>
-          <label>Model <input id="model" value="911" aria-label="Model" /></label>
-          <label>Year <input id="year" type="number" value="2004" aria-label="Year" /></label>
+          <label>Make <select id="brand" aria-label="Make"><option value="">Select a make...</option></select></label>
+          <label>Model <select id="model" aria-label="Model"><option value="">Select a model...</option></select></label>
+          <label>Year <select id="year" aria-label="Year"><option value="">Select a year...</option></select></label>
         </div>
         <div class="actions">
           <button id="analyze"><span id="analyzeSpinner" class="loading-spinner" style="display: none;"></span>Run Analysis</button>
@@ -198,7 +205,94 @@
         return String(text).replace(/[&<>"']/g, m => map[m]);
       }
 
-      function validateInputs() {
+      // Initialize dropdowns on page load
+      async function initializeDropdowns() {
+        await populateMakesDropdown();
+        // Set default selection and populate other dropdowns
+        document.getElementById('brand').value = 'Porsche';
+        await populateModelsDropdown();
+        document.getElementById('model').value = '911';
+        await populateYearsDropdown();
+        document.getElementById('year').value = '2004';
+        // Run initial analysis with defaults
+        runAnalysis();
+      }
+
+      async function populateMakesDropdown() {
+        try {
+          const response = await fetch('/dropdown-makes');
+          if (!response.ok) throw new Error('Failed to fetch makes');
+          const makes = await response.json();
+          const select = document.getElementById('brand');
+          select.innerHTML = '<option value="">Select a make...</option>';
+          makes.forEach(make => {
+            const option = document.createElement('option');
+            option.value = make;
+            option.textContent = make;
+            select.appendChild(option);
+          });
+        } catch (error) {
+          console.error('Error populating makes:', error);
+        }
+      }
+
+      async function populateModelsDropdown() {
+        const brand = document.getElementById('brand').value;
+        const modelSelect = document.getElementById('model');
+        const yearSelect = document.getElementById('year');
+        
+        modelSelect.innerHTML = '<option value="">Select a model...</option>';
+        yearSelect.innerHTML = '<option value="">Select a year...</option>';
+        
+        if (!brand) return;
+        
+        try {
+          const response = await fetch(`/dropdown-models?make=${encodeURIComponent(brand)}`);
+          if (!response.ok) throw new Error('Failed to fetch models');
+          const models = await response.json();
+          models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model;
+            option.textContent = model;
+            modelSelect.appendChild(option);
+          });
+        } catch (error) {
+          console.error('Error populating models:', error);
+        }
+      }
+
+      async function populateYearsDropdown() {
+        const brand = document.getElementById('brand').value;
+        const model = document.getElementById('model').value;
+        const yearSelect = document.getElementById('year');
+        
+        yearSelect.innerHTML = '<option value="">Select a year...</option>';
+        
+        if (!brand || !model) return;
+        
+        try {
+          const response = await fetch(
+            `/dropdown-years?make=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`
+          );
+          if (!response.ok) throw new Error('Failed to fetch years');
+          const years = await response.json();
+          // Sort in descending order (newest first)
+          years.sort((a, b) => b - a);
+          years.forEach(year => {
+            const option = document.createElement('option');
+            option.value = year;
+            option.textContent = year;
+            yearSelect.appendChild(option);
+          });
+        } catch (error) {
+          console.error('Error populating years:', error);
+        }
+      }
+
+      // Event listeners for cascading dropdowns
+      document.getElementById('brand').addEventListener('change', populateModelsDropdown);
+      document.getElementById('model').addEventListener('change', populateYearsDropdown);
+
         const brand = document.getElementById('brand').value.trim();
         const model = document.getElementById('model').value.trim();
         const year = document.getElementById('year').value;
@@ -208,18 +302,18 @@
         errorDiv.textContent = '';
 
         if (!brand) {
-          errorDiv.textContent = 'Please enter a valid brand.';
+          errorDiv.textContent = 'Please select a make.';
           errorDiv.classList.add('show');
           return false;
         }
         if (!model) {
-          errorDiv.textContent = 'Please enter a valid model.';
+          errorDiv.textContent = 'Please select a model.';
           errorDiv.classList.add('show');
           return false;
         }
         const yearNum = parseInt(year);
         if (!year || yearNum < 1900 || yearNum > 2026) {
-          errorDiv.textContent = 'Please enter a year between 1900 and 2026.';
+          errorDiv.textContent = 'Please select a year between 1900 and 2026.';
           errorDiv.classList.add('show');
           return false;
         }
@@ -608,7 +702,8 @@
         URL.revokeObjectURL(url);
       });
 
-      runAnalysis();
+      // Initialize dropdowns when page loads
+      window.addEventListener('DOMContentLoaded', initializeDropdowns);
     </script>
   </body>
 </html>
