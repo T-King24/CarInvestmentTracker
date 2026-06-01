@@ -46,16 +46,22 @@ variables:
 | Variable | Purpose |
 | --- | --- |
 | `CIT_DATA_PROVIDER` | Set to `http` to enable the HTTP provider |
+| `CIT_CATALOG_API_URL` | Optional live taxonomy feed for make/model/variant/year dropdowns |
 | `CIT_HISTORICAL_API_URL` | Endpoint returning historical sold-price points |
 | `CIT_LISTINGS_API_URL` | Endpoint returning current listings |
 | `CIT_DISCUSSIONS_API_URL` | Endpoint returning news/forum discussions |
 | `CIT_DATA_API_KEY` | Optional bearer token sent as `Authorization` |
 | `CIT_DATA_TIMEOUT` | Optional request timeout (seconds) |
 
-Each endpoint receives `brand`, `model`, `year` and optional `variant` query
-parameters and must return JSON in the shapes documented in
-`services/providers/http_provider.py`. You can also plug in a custom provider in
-code via `set_market_provider(...)`.
+Market-data endpoints receive `brand`, `model`, `year` and optional `variant`
+query parameters and must return JSON in the shapes documented in
+`services/providers/http_provider.py`. You can also plug in a custom provider
+in code via `set_market_provider(...)`.
+
+If `CIT_CATALOG_API_URL` is set, the app fetches dropdown taxonomy from that
+endpoint. Supported response shapes:
+- `{"makes":[{"name":"Porsche","models":[{"name":"911","years":[...],"variants":[...],"fuel":[...],"transmission":[...]}]}]}`
+- Or the same nested mapping shape used by `car_investment_tracker/car_data.py`.
 
 > **Legal note.** Use official/partner APIs or licensed datasets. Only scrape
 > sites where their terms permit it, and enforce robots.txt and rate limits.
