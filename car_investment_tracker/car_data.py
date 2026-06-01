@@ -193,16 +193,18 @@ def _load_live_catalog() -> dict[str, dict[str, dict]] | None:
 def _normalize_catalog_payload(payload: object) -> dict[str, dict[str, dict]]:
     if isinstance(payload, dict) and payload:
         if _looks_like_catalog(payload):
-            return {
-                str(make): {
-                    str(model): _normalize_model_meta(meta)
-                    for model, meta in models.items()
-                    if isinstance(models, dict)
-                    if isinstance(meta, dict)
-                }
-                for make, models in payload.items()
-                if isinstance(models, dict)
-            }
+            catalog: dict[str, dict[str, dict]] = {}
+            for make, raw_models in payload.items():
+                if not isinstance(raw_models, dict):
+                    continue
+                models: dict[str, dict] = {}
+                for model, raw_meta in raw_models.items():
+                    if not isinstance(raw_meta, dict):
+                        continue
+                    models[str(model)] = _normalize_model_meta(raw_meta)
+                if models:
+                    catalog[str(make)] = models
+            return catalog
 
         makes = payload.get("makes")
         if isinstance(makes, list):
