@@ -253,6 +253,21 @@
       </div>
 
       <div class="card">
+        <h2>📅 Market Events & Milestones</h2>
+        <div id="marketEventsContainer" style="display: none;">
+          <table style="width: 100%;">
+            <thead>
+              <tr><th>Year</th><th>Event</th><th>Impact</th></tr>
+            </thead>
+            <tbody id="eventsTableBody"></tbody>
+          </table>
+        </div>
+        <div id="eventsPlaceholder">No market events found.</div>
+      </div>
+
+      <div id="explanationContainer"></div>
+
+      <div class="card">
         <h2>Undervalued Listings</h2>
         <table>
           <thead>
@@ -491,6 +506,20 @@
             document.getElementById('anomaliesTableBody').innerHTML = anomalyRows.join('');
             document.getElementById('anomaliesContainer').style.display = 'block';
             document.getElementById('anomaliesPlaceholder').style.display = 'none';
+          }
+
+          // Populate Market Events Panel
+          if (latestPayload.market_events && latestPayload.market_events.length > 0) {
+            const eventRows = latestPayload.market_events.map(item => 
+              `<tr>
+                <td>${item.year || 'Unknown'}</td>
+                <td>${escapeHtml(item.event_name || 'Market event')}</td>
+                <td>${escapeHtml(item.impact_direction || 'Neutral')} ${item.impact_magnitude ? `(${item.impact_magnitude})` : ''}</td>
+              </tr>`
+            );
+            document.getElementById('eventsTableBody').innerHTML = eventRows.join('');
+            document.getElementById('marketEventsContainer').style.display = 'block';
+            document.getElementById('eventsPlaceholder').style.display = 'none';
           }
 
           const tooltip = document.getElementById('tooltip');
