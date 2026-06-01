@@ -66,7 +66,8 @@ def get_historical_prices(brand: str, model: str, year: int) -> list[PricePoint]
     seed = _stable_seed("historical", brand, model, year) & 0xFFFFFFFF
     rng = random.Random(seed)
     current_year = datetime.now(timezone.utc).year
-    start_year = current_year - 19
+    # Start from the model year instead of 20 years ago
+    start_year = year
 
     age = max(1, current_year - year)
     base = _base_market_price(brand, model, year, current_year)
