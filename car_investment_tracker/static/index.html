@@ -177,6 +177,81 @@
 
       <div id="explanationContainer"></div>
 
+      <!-- High-Value Feature Panels -->
+      <div class="card">
+        <h2>📊 Sentiment Breakdown</h2>
+        <div id="sentimentBreakdownContainer" style="display: none;">
+          <table style="width: 100%;">
+            <tr><td><strong>Forums</strong></td><td id="sentimentForums"></td><td id="sentimentForumsMentions"></td></tr>
+            <tr><td><strong>Auction Commentary</strong></td><td id="sentimentAuctions"></td><td id="sentimentAuctionsMentions"></td></tr>
+            <tr><td><strong>News Articles</strong></td><td id="sentimentNews"></td><td id="sentimentNewsMentions"></td></tr>
+            <tr><td><strong>Social Media</strong></td><td id="sentimentSocial"></td><td id="sentimentSocialMentions"></td></tr>
+          </table>
+        </div>
+        <div id="sentimentBreakdownPlaceholder">No sentiment breakdown data available.</div>
+      </div>
+
+      <div class="card">
+        <h2>🏆 Market Comparables</h2>
+        <div id="marketComparablesContainer" style="display: none;">
+          <table style="width: 100%;">
+            <thead>
+              <tr><th>Model</th><th>Year</th><th>Price (GBP)</th><th>Mileage</th></tr>
+            </thead>
+            <tbody id="comparablesTableBody"></tbody>
+          </table>
+        </div>
+        <div id="comparablesPlaceholder">No comparable data available.</div>
+      </div>
+
+      <div class="card">
+        <h2>📈 Market Metrics & Volatility</h2>
+        <div id="volatilityContainer" style="display: none;">
+          <div class="grid">
+            <div class="explanation-item">
+              <div class="explanation-item-label">Volatility Index</div>
+              <div id="volatilityIndex"></div>
+            </div>
+            <div class="explanation-item">
+              <div class="explanation-item-label">Price Range</div>
+              <div id="priceRange"></div>
+            </div>
+            <div class="explanation-item">
+              <div class="explanation-item-label">Market Stability</div>
+              <div id="marketStability"></div>
+            </div>
+          </div>
+        </div>
+        <div id="volatilityPlaceholder">No volatility data available.</div>
+      </div>
+
+      <div class="card">
+        <h2>⚙️ Spec-Adjusted Valuation</h2>
+        <div id="specAdjustmentsContainer" style="display: none;">
+          <table style="width: 100%;">
+            <tr><td><strong>Transmission</strong></td><td id="specTransmission"></td></tr>
+            <tr><td><strong>Trim Level</strong></td><td id="specTrim"></td></tr>
+            <tr><td><strong>Condition</strong></td><td id="specCondition"></td></tr>
+            <tr><td><strong>Mileage Bracket</strong></td><td id="specMileage"></td></tr>
+            <tr><td><strong>Base Price Adjustment</strong></td><td id="specAdjustment"></td></tr>
+          </table>
+        </div>
+        <div id="specPlaceholder">No spec adjustment data available.</div>
+      </div>
+
+      <div class="card">
+        <h2>🚨 Listing Anomalies Detected</h2>
+        <div id="anomaliesContainer" style="display: none;">
+          <table style="width: 100%;">
+            <thead>
+              <tr><th>Type</th><th>Count</th><th>Severity</th></tr>
+            </thead>
+            <tbody id="anomaliesTableBody"></tbody>
+          </table>
+        </div>
+        <div id="anomaliesPlaceholder">No anomalies detected in listings.</div>
+      </div>
+
       <div class="card">
         <h2>Undervalued Listings</h2>
         <table>
@@ -348,6 +423,75 @@
 
           latestPayload = await response.json();
           document.getElementById('sentiment').textContent = `Sentiment Score: ${latestPayload.sentiment.score}/5 (${latestPayload.sentiment.mentions_analyzed} mentions analyzed)`;
+
+          // Populate Sentiment Breakdown Panel
+          if (latestPayload.sentiment_breakdown) {
+            const sb = latestPayload.sentiment_breakdown;
+            document.getElementById('sentimentForums').textContent = `${sb.forums_score}/5`;
+            document.getElementById('sentimentForumsMentions').textContent = `(${sb.forums_mentions} mentions)`;
+            document.getElementById('sentimentAuctions').textContent = `${sb.auction_score}/5`;
+            document.getElementById('sentimentAuctionsMentions').textContent = `(${sb.auction_mentions} mentions)`;
+            document.getElementById('sentimentNews').textContent = `${sb.news_score}/5`;
+            document.getElementById('sentimentNewsMentions').textContent = `(${sb.news_mentions} mentions)`;
+            document.getElementById('sentimentSocial').textContent = `${sb.social_score}/5`;
+            document.getElementById('sentimentSocialMentions').textContent = `(${sb.social_mentions} mentions)`;
+            document.getElementById('sentimentBreakdownContainer').style.display = 'block';
+            document.getElementById('sentimentBreakdownPlaceholder').style.display = 'none';
+          }
+
+          // Populate Market Comparables Panel
+          if (latestPayload.market_comparables && latestPayload.market_comparables.length > 0) {
+            const comparablesRows = latestPayload.market_comparables.slice(0, 5).map(item => 
+              `<tr>
+                <td>${escapeHtml(item.model || 'N/A')}</td>
+                <td>${item.year || 'N/A'}</td>
+                <td>${formatPrice(item.price || 0, 'GBP')}</td>
+                <td>${item.mileage ? item.mileage.toLocaleString() + ' miles' : 'N/A'}</td>
+              </tr>`
+            );
+            document.getElementById('comparablesTableBody').innerHTML = comparablesRows.join('');
+            document.getElementById('marketComparablesContainer').style.display = 'block';
+            document.getElementById('comparablesPlaceholder').style.display = 'none';
+          }
+
+          // Populate Volatility Panel
+          if (latestPayload.volatility_metrics) {
+            const vm = latestPayload.volatility_metrics;
+            const volatilityScore = vm.volatility_score || 5;
+            const stability = volatilityScore <= 3 ? '✓ Low - Stable Market' : volatilityScore <= 6 ? '~ Moderate - Some Volatility' : '⚠ High - Volatile Market';
+            document.getElementById('volatilityIndex').textContent = `${volatilityScore}/10`;
+            document.getElementById('priceRange').textContent = `£${formatPrice(vm.price_min || 0, 'GBP')} - £${formatPrice(vm.price_max || 0, 'GBP')}`;
+            document.getElementById('marketStability').textContent = stability;
+            document.getElementById('volatilityContainer').style.display = 'block';
+            document.getElementById('volatilityPlaceholder').style.display = 'none';
+          }
+
+          // Populate Spec Adjustments Panel
+          if (latestPayload.spec_adjustments) {
+            const sa = latestPayload.spec_adjustments;
+            document.getElementById('specTransmission').textContent = sa.transmission_adjustment ? `${(sa.transmission_adjustment * 100).toFixed(1)}% adjustment` : 'Standard';
+            document.getElementById('specTrim').textContent = sa.trim_adjustment ? `${(sa.trim_adjustment * 100).toFixed(1)}% adjustment` : 'Standard';
+            document.getElementById('specCondition').textContent = sa.condition_adjustment ? `${(sa.condition_adjustment * 100).toFixed(1)}% adjustment` : 'Average';
+            document.getElementById('specMileage').textContent = sa.mileage_adjustment ? `${(sa.mileage_adjustment * 100).toFixed(1)}% adjustment` : 'Normal';
+            const totalAdjustment = (sa.transmission_adjustment || 0) + (sa.trim_adjustment || 0) + (sa.condition_adjustment || 0) + (sa.mileage_adjustment || 0);
+            document.getElementById('specAdjustment').textContent = `${(totalAdjustment * 100).toFixed(1)}% total`;
+            document.getElementById('specAdjustmentsContainer').style.display = 'block';
+            document.getElementById('specPlaceholder').style.display = 'none';
+          }
+
+          // Populate Anomalies Panel
+          if (latestPayload.listing_anomalies && latestPayload.listing_anomalies.length > 0) {
+            const anomalyRows = latestPayload.listing_anomalies.map(item => 
+              `<tr>
+                <td>${escapeHtml(item.anomaly_type || 'Unknown')}</td>
+                <td>${item.count || 0}</td>
+                <td>${item.severity || 'Medium'}</td>
+              </tr>`
+            );
+            document.getElementById('anomaliesTableBody').innerHTML = anomalyRows.join('');
+            document.getElementById('anomaliesContainer').style.display = 'block';
+            document.getElementById('anomaliesPlaceholder').style.display = 'none';
+          }
 
           const tooltip = document.getElementById('tooltip');
           const rows = latestPayload.undervalued_listings.map(item => {
