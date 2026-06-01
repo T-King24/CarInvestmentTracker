@@ -44,10 +44,10 @@ def _age_value_factor(age: int) -> float:
     """
     if age <= 0:
         return 1.0
-    depreciated = DEPRECIATION_FLOOR + (1.0 - DEPRECIATION_FLOOR) * (ANNUAL_DEPRECIATION_FACTOR ** age)
+    value_factor = DEPRECIATION_FLOOR + (1.0 - DEPRECIATION_FLOOR) * (ANNUAL_DEPRECIATION_FACTOR ** age)
     if age >= CLASSIC_AGE_THRESHOLD:
-        depreciated *= 1.0 + (age - CLASSIC_AGE_THRESHOLD) * CLASSIC_APPRECIATION_PER_YEAR
-    return depreciated
+        value_factor *= 1.0 + (age - CLASSIC_AGE_THRESHOLD) * CLASSIC_APPRECIATION_PER_YEAR
+    return value_factor
 
 
 def _inflation_adjustment(year: int, base_year: int) -> float:
