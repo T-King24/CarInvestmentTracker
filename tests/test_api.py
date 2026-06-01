@@ -44,6 +44,21 @@ def test_brand_themes_endpoint_includes_signature_colours():
 
 
 # ---------------------------------------------------------------------------
+# Health / readiness probe (used by live deployments)
+# ---------------------------------------------------------------------------
+
+def test_healthz_reports_ok_and_null_mode_by_default():
+    response = client.get("/healthz")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    # With no provider configured the app is up but not serving live market data.
+    assert body["data_mode"] == "null"
+    assert "version" in body
+    assert "provider" in body
+
+
+# ---------------------------------------------------------------------------
 # No-fake-data behaviour: with no provider configured, nothing is fabricated
 # ---------------------------------------------------------------------------
 

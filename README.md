@@ -74,6 +74,7 @@ Vehicle endpoints accept query params `brand`, `model`, `year` and optional `var
 - `GET /prediction`
 - `GET /undervalued-listings`
 - `GET /analysis` (combined endpoint with `data_availability` transparency)
+- `GET /healthz` (service status + live/null `data_mode` for health checks)
 
 ## Data flow
 1. User selects make -> model -> variant -> year (taxonomy from the catalog).
@@ -98,6 +99,30 @@ export CIT_LISTINGS_API_URL="https://your-feed/listings"
 export CIT_DISCUSSIONS_API_URL="https://your-feed/discussions"
 uvicorn car_investment_tracker.main:app --reload
 ```
+
+## Go live (production deployment)
+The app ships with a production entrypoint that binds to `0.0.0.0` and honours
+the `PORT` environment variable used by most hosting platforms.
+
+Run the production server directly:
+```bash
+pip install -r requirements.txt
+python -m car_investment_tracker.main   # serves on $PORT (default 8000)
+```
+
+Or build and run the container:
+```bash
+docker build -t car-investment-tracker .
+docker run --rm -p 8000:8000 --env-file .env car-investment-tracker
+```
+
+PaaS platforms (Railway, Render, Heroku, Fly, ...) can use the included
+`Procfile`. Copy `.env.example` to `.env` and set the provider variables to run
+**fully live** with real market data; without them the app stays up and serves
+the catalog while reporting market data as unavailable.
+
+- `GET /healthz` returns service status and `data_mode` (`live` or `null`) for
+  load-balancer health checks and readiness probes.
 
 ## Test
 ```bash

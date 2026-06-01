@@ -28,6 +28,7 @@ from car_investment_tracker.services.macro_economics import get_macroeconomic_co
 from car_investment_tracker.services.rarity_projection import calculate_rarity_projection
 from car_investment_tracker.services.brand_themes import get_all_brand_themes, get_brand_theme
 from car_investment_tracker.services.providers import get_market_provider
+from car_investment_tracker.services.providers.config import load_config
 from car_investment_tracker.models import DataAvailability, DataQualityIndicator
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,26 @@ def _validate_vehicle_params(brand: str, model: str, year: int) -> None:
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(static_dir / "index.html")
+
+
+@app.get("/healthz")
+def healthz() -> dict:
+    """Liveness/readiness probe.
+
+    Returns service status and whether a live market-data provider is
+    configured. ``data_mode`` is ``"live"`` when an external provider is wired
+    up via environment variables, otherwise ``"null"`` (catalog works, but
+    market data is reported as unavailable rather than fabricated).
+    """
+    config = load_config()
+    provider = get_market_provider()
+    return {
+        "status": "ok",
+        "version": app.version,
+        "data_mode": "live" if config.is_live else "null",
+        "provider": getattr(provider, "name", provider.__class__.__name__),
+        "time": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @app.get("/dropdown-makes")
@@ -733,3 +754,27 @@ def analysis(
         },
     }
 
+
+
+def run() -> None:
+    """Production entrypoint.
+
+    Binds to ``0.0.0.0`` and honours the ``PORT`` environment variable used by
+    most hosting platforms (Railway, Render, Heroku, Fly, Cloud Run, ...).
+    """
+    import os
+
+    import uvicorn
+
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run(
+        "car_investment_tracker.main:app",
+        host="0.0.0.0",
+        port=port,
+        proxy_headers=True,
+        forwarded_allow_ips="*",
+    )
+
+
+if __name__ == "__main__":
+    run()
