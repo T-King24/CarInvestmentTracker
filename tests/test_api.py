@@ -43,6 +43,59 @@ def test_brand_themes_endpoint_includes_signature_colours():
     assert "_default" in themes
 
 
+def test_dropdowns_can_use_live_catalog_api(monkeypatch):
+    class _Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "makes": [
+                    {
+                        "name": "TestMake",
+                        "models": [
+                            {
+                                "name": "TestModel",
+                                "years": [2024, 2025],
+                                "variants": ["Base", "S"],
+                            }
+                        ],
+                    }
+                ]
+            }
+
+    captured = {}
+
+    def fake_get(url, timeout, headers):
+        captured["url"] = url
+        captured["timeout"] = timeout
+        captured["headers"] = headers
+        return _Response()
+
+    monkeypatch.setenv("CIT_CATALOG_API_URL", "https://catalog.example/vehicles")
+    monkeypatch.setenv("CIT_DATA_API_KEY", "test-key")
+    monkeypatch.setenv("CIT_DATA_TIMEOUT", "12")
+    monkeypatch.setattr("httpx.get", fake_get)
+
+    makes = client.get("/dropdown-makes")
+    models = client.get("/dropdown-models", params={"make": "TestMake"})
+    variants = client.get("/dropdown-variants", params={"make": "TestMake", "model": "TestModel"})
+    years = client.get("/dropdown-years", params={"make": "TestMake", "model": "TestModel"})
+
+    assert makes.status_code == 200
+    assert models.status_code == 200
+    assert variants.status_code == 200
+    assert years.status_code == 200
+    assert makes.json() == ["TestMake"]
+    assert models.json() == ["TestModel"]
+    assert variants.json() == ["Base", "S"]
+    assert years.json() == [2024, 2025]
+    assert captured["url"] == "https://catalog.example/vehicles"
+    assert captured["timeout"] == 12.0
+    assert captured["headers"]["Authorization"].startswith("Bearer ")
+    assert captured["headers"]["Authorization"].endswith("test-key")
+
+
 # ---------------------------------------------------------------------------
 # Health / readiness probe (used by live deployments)
 # ---------------------------------------------------------------------------

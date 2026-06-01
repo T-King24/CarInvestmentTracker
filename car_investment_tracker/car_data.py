@@ -13,6 +13,11 @@ Each model maps to a metadata dict::
 
 from __future__ import annotations
 
+import logging
+import os
+
+from car_investment_tracker.services.cache import cache
+
 # Common drivetrain option sets reused across many models.
 _AUTO = ["Automatic"]
 _MANUAL = ["Manual"]
@@ -20,6 +25,8 @@ _BOTH = ["Manual", "Automatic"]
 _PETROL = ["Petrol"]
 _PETROL_HYBRID = ["Petrol", "Hybrid"]
 _ALL_FUEL = ["Petrol", "Diesel", "Hybrid", "Electric"]
+
+logger = logging.getLogger(__name__)
 
 
 def _m(years, variants, fuel=None, transmission=None) -> dict:
@@ -150,69 +157,188 @@ CAR_CATALOG: dict[str, dict[str, dict]] = {
 }
 
 
+@cache.cached
+def _load_live_catalog() -> dict[str, dict[str, dict]] | None:
+    url = (os.getenv("CIT_CATALOG_API_URL") or "").strip()
+    if not url:
+        return None
+    try:
+        import httpx
+    except ImportError:  # pragma: no cover
+        logger.warning("httpx is required for live catalog fetching but is not installed")
+        return None
+
+    timeout_raw = (os.getenv("CIT_DATA_TIMEOUT") or "8").strip()
+    try:
+        timeout = float(timeout_raw)
+    except ValueError:
+        timeout = 8.0
+
+    headers: dict[str, str] = {}
+    api_key = (os.getenv("CIT_DATA_API_KEY") or "").strip()
+    if api_key:
+        headers["Authorization"] = "Bearer " + api_key
+
+    try:
+        response = httpx.get(url, timeout=timeout, headers=headers)
+        response.raise_for_status()
+        payload = response.json()
+        catalog = _normalize_catalog_payload(payload)
+        return catalog or None
+    except Exception as exc:  # pragma: no cover - network failures are environment-dependent
+        logger.warning("Live catalog fetch failed from %s: %s", url, exc)
+        return None
+
+
+def _normalize_catalog_payload(payload: object) -> dict[str, dict[str, dict]]:
+    if isinstance(payload, dict) and payload:
+        if _looks_like_catalog(payload):
+            catalog: dict[str, dict[str, dict]] = {}
+            for make, raw_models in payload.items():
+                if not isinstance(raw_models, dict):
+                    continue
+                models: dict[str, dict] = {}
+                for model, raw_meta in raw_models.items():
+                    if not isinstance(raw_meta, dict):
+                        continue
+                    models[str(model)] = _normalize_model_meta(raw_meta)
+                if models:
+                    catalog[str(make)] = models
+            return catalog
+
+        makes = payload.get("makes")
+        if isinstance(makes, list):
+            catalog: dict[str, dict[str, dict]] = {}
+            for raw_make in makes:
+                if not isinstance(raw_make, dict):
+                    continue
+                make_name = str(raw_make.get("name", "")).strip()
+                if not make_name:
+                    continue
+                raw_models = raw_make.get("models")
+                if not isinstance(raw_models, list):
+                    continue
+                models: dict[str, dict] = {}
+                for raw_model in raw_models:
+                    if not isinstance(raw_model, dict):
+                        continue
+                    model_name = str(raw_model.get("name", "")).strip()
+                    if not model_name:
+                        continue
+                    models[model_name] = _normalize_model_meta(raw_model)
+                if models:
+                    catalog[make_name] = models
+            return catalog
+    return {}
+
+
+def _normalize_model_meta(meta: dict) -> dict:
+    years_raw = meta.get("years")
+    variants_raw = meta.get("variants")
+    fuel_raw = meta.get("fuel")
+    transmission_raw = meta.get("transmission")
+
+    years = sorted(
+        {
+            int(year)
+            for year in (years_raw if isinstance(years_raw, list) else [])
+            if isinstance(year, (int, float, str)) and str(year).strip().isdigit()
+        }
+    )
+    variants = [str(v).strip() for v in (variants_raw if isinstance(variants_raw, list) else []) if str(v).strip()]
+    fuel = [str(v).strip() for v in (fuel_raw if isinstance(fuel_raw, list) else _PETROL) if str(v).strip()]
+    transmission = [str(v).strip() for v in (transmission_raw if isinstance(transmission_raw, list) else _BOTH) if str(v).strip()]
+
+    return {
+        "years": years,
+        "variants": variants,
+        "fuel": fuel or list(_PETROL),
+        "transmission": transmission or list(_BOTH),
+    }
+
+
+def _looks_like_catalog(payload: dict) -> bool:
+    first_models = next((value for value in payload.values() if isinstance(value, dict)), None)
+    if first_models is None:
+        return False
+    first_meta = next((value for value in first_models.values() if isinstance(value, dict)), None)
+    if first_meta is None:
+        return False
+    return "years" in first_meta and "variants" in first_meta
+
+
+def _active_catalog() -> dict[str, dict[str, dict]]:
+    return _load_live_catalog() or CAR_CATALOG
+
+
 def _make_key(make: str) -> str | None:
-    return next((k for k in CAR_CATALOG if k.lower() == make.lower()), None)
+    catalog = _active_catalog()
+    return next((k for k in catalog if k.lower() == make.lower()), None)
 
 
 def _model_key(make_key: str, model: str) -> str | None:
-    models = CAR_CATALOG[make_key]
+    models = _active_catalog()[make_key]
     return next((k for k in models if k.lower() == model.lower()), None)
 
 
 def get_makes() -> list[str]:
     """Get all available car makes."""
-    return sorted(CAR_CATALOG.keys())
+    return sorted(_active_catalog().keys())
 
 
 def get_models(make: str) -> list[str]:
     """Get all available models for a given make."""
+    catalog = _active_catalog()
     make_key = _make_key(make)
     if not make_key:
         return []
-    return sorted(CAR_CATALOG[make_key].keys())
+    return sorted(catalog[make_key].keys())
 
 
 def get_years(make: str, model: str) -> list[int]:
     """Get all available years for a given make and model."""
+    catalog = _active_catalog()
     make_key = _make_key(make)
     if not make_key:
         return []
     model_key = _model_key(make_key, model)
     if not model_key:
         return []
-    return sorted(CAR_CATALOG[make_key][model_key]["years"])
+    return sorted(catalog[make_key][model_key]["years"])
 
 
 def get_variants(make: str, model: str) -> list[str]:
     """Get all available variants/derivatives for a given make and model."""
+    catalog = _active_catalog()
     make_key = _make_key(make)
     if not make_key:
         return []
     model_key = _model_key(make_key, model)
     if not model_key:
         return []
-    return list(CAR_CATALOG[make_key][model_key]["variants"])
+    return list(catalog[make_key][model_key]["variants"])
 
 
 def get_model_metadata(make: str, model: str) -> dict | None:
     """Return the full metadata dict (years, variants, fuel, transmission)."""
+    catalog = _active_catalog()
     make_key = _make_key(make)
     if not make_key:
         return None
     model_key = _model_key(make_key, model)
     if not model_key:
         return None
-    return CAR_CATALOG[make_key][model_key]
+    return catalog[make_key][model_key]
 
 
 def get_all_data() -> dict:
     """Get all makes, models, variants and years data."""
+    catalog = _active_catalog()
     return {
         make: {
             "models": {
-                model: dict(meta)
-                for model, meta in CAR_CATALOG[make].items()
+                model: dict(meta) for model, meta in catalog[make].items()
             }
         }
-        for make in CAR_CATALOG
+        for make in catalog
     }
