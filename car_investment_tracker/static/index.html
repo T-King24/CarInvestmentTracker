@@ -245,144 +245,6 @@
 
       <div id="explanationContainer"></div>
 
-      <!-- High-Value Feature Panels -->
-      <div class="card">
-        <h2>📊 Sentiment Breakdown</h2>
-        <div id="sentimentBreakdownContainer" style="display: none;">
-          <table style="width: 100%;">
-            <tr><td><strong>Forums</strong></td><td id="sentimentForums"></td><td id="sentimentForumsMentions"></td></tr>
-            <tr><td><strong>Auction Commentary</strong></td><td id="sentimentAuctions"></td><td id="sentimentAuctionsMentions"></td></tr>
-            <tr><td><strong>News Articles</strong></td><td id="sentimentNews"></td><td id="sentimentNewsMentions"></td></tr>
-            <tr><td><strong>Social Media</strong></td><td id="sentimentSocial"></td><td id="sentimentSocialMentions"></td></tr>
-          </table>
-        </div>
-        <div id="sentimentBreakdownPlaceholder">No sentiment breakdown data available.</div>
-      </div>
-
-      <div class="card">
-        <h2>🏆 Market Comparables</h2>
-        <div id="marketComparablesContainer" style="display: none;">
-          <table style="width: 100%;">
-            <thead>
-              <tr><th>Model</th><th>Year</th><th>Price (GBP)</th><th>Mileage</th></tr>
-            </thead>
-            <tbody id="comparablesTableBody"></tbody>
-          </table>
-        </div>
-        <div id="comparablesPlaceholder">No comparable data available.</div>
-      </div>
-
-      <div class="card">
-        <h2>📈 Market Metrics & Volatility</h2>
-        <div id="volatilityContainer" style="display: none;">
-          <div class="grid">
-            <div class="explanation-item">
-              <div class="explanation-item-label">Volatility Index</div>
-              <div id="volatilityIndex"></div>
-            </div>
-            <div class="explanation-item">
-              <div class="explanation-item-label">Price Range</div>
-              <div id="priceRange"></div>
-            </div>
-            <div class="explanation-item">
-              <div class="explanation-item-label">Market Stability</div>
-              <div id="marketStability"></div>
-            </div>
-          </div>
-        </div>
-        <div id="volatilityPlaceholder">No volatility data available.</div>
-      </div>
-
-      <div class="card">
-        <h2>⚙️ Spec-Adjusted Valuation</h2>
-        <div id="specAdjustmentsContainer" style="display: none;">
-          <table style="width: 100%;">
-            <tr><td><strong>Transmission</strong></td><td id="specTransmission"></td></tr>
-            <tr><td><strong>Trim Level</strong></td><td id="specTrim"></td></tr>
-            <tr><td><strong>Condition</strong></td><td id="specCondition"></td></tr>
-            <tr><td><strong>Mileage Bracket</strong></td><td id="specMileage"></td></tr>
-            <tr><td><strong>Base Price Adjustment</strong></td><td id="specAdjustment"></td></tr>
-          </table>
-        </div>
-        <div id="specPlaceholder">No spec adjustment data available.</div>
-      </div>
-
-      <div class="card">
-        <h2>🚨 Listing Anomalies Detected</h2>
-        <div id="anomaliesContainer" style="display: none;">
-          <table style="width: 100%;">
-            <thead>
-              <tr><th>Type</th><th>Count</th><th>Severity</th></tr>
-            </thead>
-            <tbody id="anomaliesTableBody"></tbody>
-          </table>
-        </div>
-        <div id="anomaliesPlaceholder">No anomalies detected in listings.</div>
-      </div>
-
-      <div class="card">
-        <h2>📅 Market Events & Milestones</h2>
-        <div id="marketEventsContainer" style="display: none;">
-          <table style="width: 100%;">
-            <thead>
-              <tr><th>Year</th><th>Event</th><th>Impact</th></tr>
-            </thead>
-            <tbody id="eventsTableBody"></tbody>
-          </table>
-        </div>
-        <div id="eventsPlaceholder">No market events found.</div>
-      </div>
-
-      <div class="card">
-        <h2>🎯 Long-Term Rarity Projection</h2>
-        <div id="rarityProjectionContainer" style="display: none;">
-          <div class="grid">
-            <div class="explanation-item">
-              <div class="explanation-item-label">Production Numbers</div>
-              <div id="rarityProduction"></div>
-            </div>
-            <div class="explanation-item">
-              <div class="explanation-item-label">Estimated Survival Rate</div>
-              <div id="raritySurvivalRate"></div>
-            </div>
-            <div class="explanation-item">
-              <div class="explanation-item-label">Projected Rarity in 10 Years</div>
-              <div id="rarityProjection10y"></div>
-            </div>
-            <div class="explanation-item">
-              <div class="explanation-item-label">Investment Potential</div>
-              <div id="rarityInvestmentPotential"></div>
-            </div>
-          </div>
-        </div>
-        <div id="rarityPlaceholder">No rarity data available.</div>
-      </div>
-
-      <div class="card">
-        <h2>🌍 Macro-Economic Context</h2>
-        <div id="macroEconomicContainer" style="display: none;">
-          <div class="grid">
-            <div class="explanation-item">
-              <div class="explanation-item-label">Interest Rates</div>
-              <div id="macroInterestRates"></div>
-            </div>
-            <div class="explanation-item">
-              <div class="explanation-item-label">Inflation Trend</div>
-              <div id="macroInflationTrend"></div>
-            </div>
-            <div class="explanation-item">
-              <div class="explanation-item-label">Economic Outlook</div>
-              <div id="macroOutlook"></div>
-            </div>
-            <div class="explanation-item">
-              <div class="explanation-item-label">Price Adjustment Factor</div>
-              <div id="macroAdjustmentFactor"></div>
-            </div>
-          </div>
-        </div>
-        <div id="macroPlaceholder">No macro-economic data available.</div>
-      </div>
-
       <div class="card">
         <h2>Undervalued Listings</h2>
         <table>
@@ -556,111 +418,6 @@
           latestPayload = await response.json();
           document.getElementById('sentiment').textContent = `Sentiment Score: ${latestPayload.sentiment.score}/5 (${latestPayload.sentiment.mentions_analyzed} mentions analyzed)`;
 
-          // Populate Sentiment Breakdown Panel
-          if (latestPayload.sentiment_breakdown) {
-            const sb = latestPayload.sentiment_breakdown;
-            document.getElementById('sentimentForums').textContent = `${sb.forums_score}/5`;
-            document.getElementById('sentimentForumsMentions').textContent = `(${sb.forums_mentions} mentions)`;
-            document.getElementById('sentimentAuctions').textContent = `${sb.auction_score}/5`;
-            document.getElementById('sentimentAuctionsMentions').textContent = `(${sb.auction_mentions} mentions)`;
-            document.getElementById('sentimentNews').textContent = `${sb.news_score}/5`;
-            document.getElementById('sentimentNewsMentions').textContent = `(${sb.news_mentions} mentions)`;
-            document.getElementById('sentimentSocial').textContent = `${sb.social_score}/5`;
-            document.getElementById('sentimentSocialMentions').textContent = `(${sb.social_mentions} mentions)`;
-            document.getElementById('sentimentBreakdownContainer').style.display = 'block';
-            document.getElementById('sentimentBreakdownPlaceholder').style.display = 'none';
-          }
-
-          // Populate Market Comparables Panel
-          if (latestPayload.market_comparables && latestPayload.market_comparables.length > 0) {
-            const comparablesRows = latestPayload.market_comparables.slice(0, 5).map(item => 
-              `<tr>
-                <td>${escapeHtml(item.model || 'N/A')}</td>
-                <td>${item.year || 'N/A'}</td>
-                <td>${formatPrice(item.price || 0, 'GBP')}</td>
-                <td>${item.mileage ? item.mileage.toLocaleString() + ' miles' : 'N/A'}</td>
-              </tr>`
-            );
-            document.getElementById('comparablesTableBody').innerHTML = comparablesRows.join('');
-            document.getElementById('marketComparablesContainer').style.display = 'block';
-            document.getElementById('comparablesPlaceholder').style.display = 'none';
-          }
-
-          // Populate Volatility Panel
-          if (latestPayload.volatility_metrics) {
-            const vm = latestPayload.volatility_metrics;
-            const volatilityScore = vm.volatility_score || 5;
-            const stability = volatilityScore <= 3 ? '✓ Low - Stable Market' : volatilityScore <= 6 ? '~ Moderate - Some Volatility' : '⚠ High - Volatile Market';
-            document.getElementById('volatilityIndex').textContent = `${volatilityScore}/10`;
-            document.getElementById('priceRange').textContent = `£${formatPrice(vm.price_min || 0, 'GBP')} - £${formatPrice(vm.price_max || 0, 'GBP')}`;
-            document.getElementById('marketStability').textContent = stability;
-            document.getElementById('volatilityContainer').style.display = 'block';
-            document.getElementById('volatilityPlaceholder').style.display = 'none';
-          }
-
-          // Populate Spec Adjustments Panel
-          if (latestPayload.spec_adjustments) {
-            const sa = latestPayload.spec_adjustments;
-            document.getElementById('specTransmission').textContent = sa.transmission_adjustment ? `${(sa.transmission_adjustment * 100).toFixed(1)}% adjustment` : 'Standard';
-            document.getElementById('specTrim').textContent = sa.trim_adjustment ? `${(sa.trim_adjustment * 100).toFixed(1)}% adjustment` : 'Standard';
-            document.getElementById('specCondition').textContent = sa.condition_adjustment ? `${(sa.condition_adjustment * 100).toFixed(1)}% adjustment` : 'Average';
-            document.getElementById('specMileage').textContent = sa.mileage_adjustment ? `${(sa.mileage_adjustment * 100).toFixed(1)}% adjustment` : 'Normal';
-            const totalAdjustment = (sa.transmission_adjustment || 0) + (sa.trim_adjustment || 0) + (sa.condition_adjustment || 0) + (sa.mileage_adjustment || 0);
-            document.getElementById('specAdjustment').textContent = `${(totalAdjustment * 100).toFixed(1)}% total`;
-            document.getElementById('specAdjustmentsContainer').style.display = 'block';
-            document.getElementById('specPlaceholder').style.display = 'none';
-          }
-
-          // Populate Anomalies Panel
-          if (latestPayload.listing_anomalies && latestPayload.listing_anomalies.length > 0) {
-            const anomalyRows = latestPayload.listing_anomalies.map(item => 
-              `<tr>
-                <td>${escapeHtml(item.anomaly_type || 'Unknown')}</td>
-                <td>${item.count || 0}</td>
-                <td>${item.severity || 'Medium'}</td>
-              </tr>`
-            );
-            document.getElementById('anomaliesTableBody').innerHTML = anomalyRows.join('');
-            document.getElementById('anomaliesContainer').style.display = 'block';
-            document.getElementById('anomaliesPlaceholder').style.display = 'none';
-          }
-
-          // Populate Market Events Panel
-          if (latestPayload.market_events && latestPayload.market_events.length > 0) {
-            const eventRows = latestPayload.market_events.map(item => 
-              `<tr>
-                <td>${item.year || 'Unknown'}</td>
-                <td>${escapeHtml(item.event_name || 'Market event')}</td>
-                <td>${escapeHtml(item.impact_direction || 'Neutral')} ${item.impact_magnitude ? `(${item.impact_magnitude})` : ''}</td>
-              </tr>`
-            );
-            document.getElementById('eventsTableBody').innerHTML = eventRows.join('');
-            document.getElementById('marketEventsContainer').style.display = 'block';
-            document.getElementById('eventsPlaceholder').style.display = 'none';
-          }
-
-          // Populate Rarity Projection Panel
-          if (latestPayload.rarity_projection) {
-            const rp = latestPayload.rarity_projection;
-            document.getElementById('rarityProduction').textContent = rp.production_numbers ? `${rp.production_numbers.toLocaleString()} units` : 'Unknown';
-            document.getElementById('raritySurvivalRate').textContent = rp.survival_rate ? `${(rp.survival_rate * 100).toFixed(1)}%` : 'Unknown';
-            document.getElementById('rarityProjection10y').textContent = rp.rarity_score_in_10_years ? `${rp.rarity_score_in_10_years}/10` : 'Unknown';
-            document.getElementById('rarityInvestmentPotential').textContent = rp.investment_potential || 'Unknown';
-            document.getElementById('rarityProjectionContainer').style.display = 'block';
-            document.getElementById('rarityPlaceholder').style.display = 'none';
-          }
-
-          // Populate Macro-Economic Context Panel
-          if (latestPayload.macro_economic_context) {
-            const macro = latestPayload.macro_economic_context;
-            document.getElementById('macroInterestRates').textContent = macro.interest_rates || 'Stable';
-            document.getElementById('macroInflationTrend').textContent = macro.inflation_trend || 'Moderate';
-            document.getElementById('macroOutlook').textContent = macro.economic_outlook || 'Neutral';
-            document.getElementById('macroAdjustmentFactor').textContent = macro.adjustment_factor ? `${(macro.adjustment_factor * 100).toFixed(1)}%` : 'N/A';
-            document.getElementById('macroEconomicContainer').style.display = 'block';
-            document.getElementById('macroPlaceholder').style.display = 'none';
-          }
-
           const tooltip = document.getElementById('tooltip');
           const rows = latestPayload.undervalued_listings.map(item => {
             const escapedSource = escapeHtml(item.source);
@@ -719,41 +476,10 @@
           // Display explanation
           displayExplanation(latestPayload.prediction_explanation);
 
-          // Display data quality feedback
-          const qualityDiv = document.createElement('div');
-          qualityDiv.className = 'card';
-          qualityDiv.style.marginTop = '1rem';
-          const confidenceColor = getConfidenceColor(latestPayload.summary.prediction_confidence);
-          qualityDiv.innerHTML = `
-            <h3>📊 Data Quality Assessment</h3>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.8rem;">
-              <div>
-                <div style="color: var(--muted); font-size: 0.9rem; font-weight: 600;">Historical Data Points</div>
-                <div style="font-size: 1.1rem; margin-top: 0.3rem;">${latestPayload.data_quality.historical_data_points}</div>
-              </div>
-              <div>
-                <div style="color: var(--muted); font-size: 0.9rem; font-weight: 600;">Current Listings Analyzed</div>
-                <div style="font-size: 1.1rem; margin-top: 0.3rem;">${latestPayload.data_quality.current_listings_count} listings</div>
-              </div>
-              <div>
-                <div style="color: var(--muted); font-size: 0.9rem; font-weight: 600;">Prediction Confidence</div>
-                <div style="font-size: 1.1rem; margin-top: 0.3rem; color: ${confidenceColor};">${latestPayload.summary.prediction_confidence}</div>
-              </div>
-            </div>
-            <p style="font-size: 0.85rem; color: var(--muted); margin-top: 0.8rem; margin-bottom: 0;">${latestPayload.data_quality.notes}</p>
-          `;
-          const explanationContainer = document.getElementById('explanationContainer');
-          if (explanationContainer.nextSibling) {
-            explanationContainer.parentNode.insertBefore(qualityDiv, explanationContainer.nextSibling);
-          } else {
-            explanationContainer.parentNode.appendChild(qualityDiv);
-          }
-
           const historicalPoints = latestPayload.historical_prices || [];
           const predictionPoints = latestPayload.prediction || [];
           const chartCurrency = latestPayload.undervalued_listings?.[0]?.currency || 'GBP';
-          const currentListingAverage = latestPayload.current_listing_average || 0;
-          
+
           const labels = [...historicalPoints.map(p => p.year), ...predictionPoints.map(p => p.year)];
           const historicalSeries = [
             ...historicalPoints.map(p => p.average_price),
@@ -766,22 +492,6 @@
             ...predictionPoints.map(p => p.predicted_price)
           ];
 
-          // Create confidence interval bounds
-          const lowerBoundSeries = [
-            ...new Array(overlapOffset).fill(null),
-            historicalPoints.length ? historicalPoints[historicalPoints.length - 1].average_price : null,
-            ...predictionPoints.map(p => p.lower_bound || p.predicted_price * 0.9)
-          ];
-          
-          const upperBoundSeries = [
-            ...new Array(overlapOffset).fill(null),
-            historicalPoints.length ? historicalPoints[historicalPoints.length - 1].average_price : null,
-            ...predictionPoints.map(p => p.upper_bound || p.predicted_price * 1.1)
-          ];
-
-          // Create average line data (horizontal line at current listing average)
-          const averageSeries = currentListingAverage > 0 ? new Array(labels.length).fill(currentListingAverage) : [];
-
           if (chart) chart.destroy();
           chart = new Chart(document.getElementById('trendChart'), {
             type: 'line',
@@ -789,7 +499,7 @@
               labels,
               datasets: [
                 {
-                  label: 'Historical Market Value',
+                  label: 'Historical price',
                   data: historicalSeries,
                   borderColor: '#6aa8ff',
                   backgroundColor: 'rgba(106, 168, 255, 0.18)',
@@ -800,7 +510,7 @@
                   spanGaps: true
                 },
                 {
-                  label: 'Predicted (Momentum-Smoothed)',
+                  label: 'Predicted price',
                   data: predictionSeries,
                   borderColor: '#f5a524',
                   backgroundColor: 'rgba(245, 165, 36, 0.18)',
@@ -809,42 +519,7 @@
                   borderDash: [8, 6],
                   borderWidth: 2.5,
                   spanGaps: true
-                },
-                {
-                  label: 'Confidence Upper Bound (+10%)',
-                  data: upperBoundSeries,
-                  borderColor: 'rgba(245, 158, 11, 0.3)',
-                  backgroundColor: 'rgba(245, 158, 11, 0.08)',
-                  tension: 0.2,
-                  pointRadius: 0,
-                  borderDash: [3, 3],
-                  borderWidth: 1,
-                  spanGaps: true,
-                  fill: false
-                },
-                {
-                  label: 'Confidence Lower Bound (-10%)',
-                  data: lowerBoundSeries,
-                  borderColor: 'rgba(245, 158, 11, 0.3)',
-                  backgroundColor: 'rgba(245, 158, 11, 0.08)',
-                  tension: 0.2,
-                  pointRadius: 0,
-                  borderDash: [3, 3],
-                  borderWidth: 1,
-                  spanGaps: true,
-                  fill: false
-                },
-                ...(currentListingAverage > 0 ? [{
-                  label: 'Current Market Average (Baseline for Comparison)',
-                  data: averageSeries,
-                  borderColor: '#10b981',
-                  borderWidth: 3,
-                  borderDash: [5, 5],
-                  pointRadius: 0,
-                  fill: false,
-                  tension: 0,
-                  order: 0  // Draw baseline behind other lines
-                }] : [])
+                }
               ]
             },
             options: {
@@ -889,38 +564,19 @@
           return;
         }
 
+        const outlook = explanation.outlook || 'Forecast';
+        const summary = explanation.outlook_summary
+          || 'The forecast continues the recent price trend with a small adjustment for online price sentiment.';
+        const driverNote = explanation.driven_by_history
+          ? 'This prediction is based mainly on the car\'s historical price trend.'
+          : 'This prediction blends the historical price trend with online price sentiment.';
+
         container.innerHTML = `
           <div class="card explanation-box">
-            <h3>📊 Forecast Explained</h3>
-            <div class="explanation-grid">
-              <div class="explanation-item">
-                <div class="explanation-item-label">📈 Forecast Model</div>
-                <div>Blends ${(explanation.historical_weight * 100).toFixed(0)}% historical trend with ${(explanation.listing_weight * 100).toFixed(0)}% current market prices</div>
-              </div>
-              <div class="explanation-item">
-                <div class="explanation-item-label">💡 Market Insight</div>
-                <div>${getSentimentPercentageText(explanation.sentiment_modifier)}</div>
-              </div>
-              <div class="explanation-item">
-                <div class="explanation-item-label">📉 Recent Trend</div>
-                <div>${getMomentumText(explanation.trend_momentum)}</div>
-              </div>
-              <div class="explanation-item">
-                <div class="explanation-item-label">🔍 Baseline Price</div>
-                <div>${formatPrice(explanation.last_historical_price, 'GBP')}</div>
-              </div>
-              <div class="explanation-item">
-                <div class="explanation-item-label">💰 Market Average</div>
-                <div>${formatPrice(explanation.current_listing_average, 'GBP')}</div>
-              </div>
-              <div class="explanation-item">
-                <div class="explanation-item-label">✓ Data Quality</div>
-                <div>${explanation.inflation_adjusted ? 'Inflation-adjusted (comparable across decades)' : 'Nominal prices'}</div>
-              </div>
-            </div>
-            <p style="font-size: 0.85rem; color: var(--muted); margin-top: 0.8rem; margin-bottom: 0;">
-              <strong>💡 How to interpret:</strong> The forecast conservatively blends historical trends with current market data, adjusted for inflation and community sentiment. Momentum smoothing prevents unrealistic price jumps. Predictions within +35%/-30% realistic bounds are most reliable.
-            </p>
+            <h3>📊 What the forecast means</h3>
+            <p style="font-size: 1.02rem; font-weight: 600; margin: 0 0 0.5rem;">${escapeHtml(outlook)}</p>
+            <p style="margin: 0 0 0.6rem;">${escapeHtml(summary)}</p>
+            <p style="font-size: 0.85rem; color: var(--muted); margin: 0;">${escapeHtml(driverNote)}</p>
           </div>
         `;
       }
@@ -929,36 +585,6 @@
 
       function formatPrice(price, currency) {
         return Number(price).toLocaleString('en-GB', { style: 'currency', currency });
-      }
-
-      function getSentimentPercentageText(modifier) {
-        if (modifier < 0.95) {
-          return `Bearish sentiment: Forecast adjusted down by ${(100 - modifier * 100).toFixed(0)}%`;
-        } else if (modifier > 1.05) {
-          return `Bullish sentiment: Forecast adjusted up by ${(modifier * 100 - 100).toFixed(0)}%`;
-        } else {
-          return `Neutral sentiment: Forecast remains near trend baseline`;
-        }
-      }
-
-      function getMomentumText(momentum) {
-        if (momentum > 500) {
-          return `Strong upward momentum (prices rising ~£${momentum.toFixed(0)}/year)`;
-        } else if (momentum > 0) {
-          return `Modest upward momentum (prices rising ~£${momentum.toFixed(0)}/year)`;
-        } else if (momentum < -500) {
-          return `Strong downward momentum (prices falling ~£${Math.abs(momentum).toFixed(0)}/year)`;
-        } else if (momentum < 0) {
-          return `Modest downward momentum (prices falling ~£${Math.abs(momentum).toFixed(0)}/year)`;
-        } else {
-          return `Stable momentum (prices relatively flat)`;
-        }
-      }
-
-      function getConfidenceColor(confidence) {
-        if (confidence === 'High') return '#10b981';
-        if (confidence === 'Medium') return '#f59e0b';
-        return '#ef4444';
       }
 
       document.getElementById('download').addEventListener('click', () => {
