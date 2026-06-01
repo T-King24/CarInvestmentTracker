@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from car_investment_tracker.models import MarketDiscussion
 from car_investment_tracker.services.cache import cache
+from car_investment_tracker.services.providers import get_market_provider
 
-# Price-outlook sentiment terms. Rather than rewarding generic praise ("iconic",
-# "reliable"), these weights reflect what the community expects prices to *do*:
-# whether values are seen as rising, holding steady, or falling. This keeps the
-# forecast tied to price expectations instead of unrelated chatter.
+# Price-outlook terms used to score real discussion text when a source does not
+# already provide an explicit sentiment score. Weights reflect what the
+# community expects prices to *do* (rise, hold, fall), keeping sentiment tied to
+# price expectations rather than unrelated chatter.
 POSITIVE_TERMS = {
     "appreciating": 2.5,
     "appreciate": 2.5,
@@ -36,37 +38,78 @@ NEGATIVE_TERMS = {
     "cooling": -1.5,
 }
 
+# Maps a provider-supplied ``price_outlook`` label onto a 0-5 sentiment score.
+OUTLOOK_SCORES = {
+    "appreciating": 4.5,
+    "collectible-demand": 4.0,
+    "undervalued": 4.0,
+    "stable": 2.5,
+    "depreciating": 1.0,
+    "overvalued": 1.0,
+}
+
+
+def _score_text(text: str) -> float | None:
+    """Score free text on the 0-5 price-outlook scale, or ``None`` if neutral/empty."""
+    if not text:
+        return None
+    words = {token.strip(".,!?").lower() for token in text.split()}
+    raw = 0.0
+    matched = False
+    for word, weight in {**POSITIVE_TERMS, **NEGATIVE_TERMS}.items():
+        if word in words:
+            raw += weight
+            matched = True
+    if not matched:
+        return None
+    return max(0.0, min(5.0, round(((raw + 15) / 30) * 5, 2)))
+
+
+def _score_discussion(discussion: MarketDiscussion) -> float | None:
+    """Resolve a 0-5 score for one real discussion using the best signal available."""
+    if discussion.sentiment_score is not None:
+        return max(0.0, min(5.0, float(discussion.sentiment_score)))
+    if discussion.price_outlook:
+        mapped = OUTLOOK_SCORES.get(discussion.price_outlook.strip().lower())
+        if mapped is not None:
+            return mapped
+    return _score_text(f"{discussion.title} {discussion.summary}")
+
+
+def _outlook_label(score: float) -> str:
+    if score >= 3.5:
+        return "Community expects values to appreciate"
+    if score >= 2.0:
+        return "Community expects values to stay broadly stable"
+    return "Community expects values to keep depreciating"
+
 
 @cache.cached
-def get_sentiment_score(brand: str, model: str, year: int) -> dict[str, float | int]:
-    # In production this should mine forums, auction commentary and market reports
-    # for what people expect prices to do, then run transformer NLP over them.
-    # These sample mentions focus on price-outlook signals (rising/falling/stable).
-    sample_mentions = [
-        f"Owners feel values of the {brand} {model} have been depreciating year on year.",
-        f"Auction watchers say prices are softening for the {year} cars.",
-        f"Some collectors think this model is undervalued and could rebound.",
-        f"Forum users expect prices to keep falling before they stabilise.",
-        f"Demand remains for clean low-mileage examples, supporting prices.",
-        f"Market reports describe the segment as cooling after recent highs.",
-        f"Enthusiasts argue the {brand} {model} is a long-term investment.",
-        f"Recent sales suggest the market may be bottoming out.",
-        f"Several listings are seen as overpriced and slow to sell.",
-        f"Commentators note the {year} generation is still declining in value.",
-    ]
+def get_sentiment_score(
+    brand: str, model: str, year: int, variant: str | None = None
+) -> dict[str, float | int | bool | str]:
+    """Compute price-outlook sentiment from real discussion sources.
 
-    score = 0.0
-    for text in sample_mentions:
-        words = {token.strip(".,").lower() for token in text.split()}
-        # Add weighted positive (appreciation) sentiment
-        for word, weight in POSITIVE_TERMS.items():
-            if word in words:
-                score += weight
-        # Add weighted negative (depreciation) sentiment
-        for word, weight in NEGATIVE_TERMS.items():
-            if word in words:
-                score += weight  # weight is already negative
+    Sentiment is derived from the same real news/forum discussions returned by
+    the provider. When no real sources are available, sentiment is reported as
+    unavailable (neutral 0-mentions) rather than invented.
+    """
+    provider = get_market_provider()
+    discussions = provider.fetch_discussions(brand, model, year, variant)
 
-    # Maps sentiment range [-15, 15] onto [0, 5] with smooth scaling.
-    normalized = max(0.0, min(5.0, round(((score + 15) / 30) * 5, 2)))
-    return {"score": normalized, "mentions_analyzed": len(sample_mentions)}
+    scores = [s for s in (_score_discussion(d) for d in discussions) if s is not None]
+    if not scores:
+        return {
+            "score": 0.0,
+            "mentions_analyzed": 0,
+            "available": False,
+            "outlook": "No market sentiment sources available for this vehicle.",
+        }
+
+    normalized = round(sum(scores) / len(scores), 2)
+    return {
+        "score": normalized,
+        "mentions_analyzed": len(scores),
+        "available": True,
+        "outlook": _outlook_label(normalized),
+    }
