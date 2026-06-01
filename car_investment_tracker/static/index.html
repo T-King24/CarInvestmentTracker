@@ -222,7 +222,7 @@
         <div>
           <span class="brand-mark">Investment Car Tracker</span>
           <h1>Classic &amp; Performance Car Valuations</h1>
-          <p class="small">Track value movement over the last 20 years, forecast future pricing, and spot undervalued listings across major UK marketplaces.</p>
+          <p class="small">Track value movement from the model year onwards, forecast future pricing, and spot undervalued listings across major UK marketplaces.</p>
         </div>
       </div>
 
@@ -860,7 +860,7 @@
                 }
               },
               scales: {
-                x: { ticks: { color: '#b8c2d3' }, grid: { color: 'rgba(154, 167, 186, 0.12)' } },
+                x: { ticks: { color: '#b8c2d3', autoSkip: true, maxTicksLimit: 20, maxRotation: 0 }, grid: { color: 'rgba(154, 167, 186, 0.12)' } },
                 y: {
                   ticks: {
                     color: '#b8c2d3',

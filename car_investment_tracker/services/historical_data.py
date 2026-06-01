@@ -4,26 +4,26 @@ from datetime import datetime, timezone
 import hashlib
 import random
 
-from car_investment_tracker.constants import MIN_PRICE_FLOOR_USD
+from car_investment_tracker.constants import MIN_PRICE_FLOOR_GBP
 from car_investment_tracker.models import PricePoint
 from car_investment_tracker.services.cache import cache
-from car_investment_tracker.services.current_listings import estimate_market_value_gbp
+from car_investment_tracker.services.current_listings import (
+    age_value_factor,
+    estimate_market_value_gbp,
+)
 
-# Number of calendar years shown in the historical window (ends at the current year).
-HISTORY_WINDOW_YEARS = 20
-
-# Depreciation/appreciation shape parameters used to build a realistic value arc.
-ANNUAL_DEPRECIATION_FACTOR = 0.90  # value retained per year while the car is depreciating
-DEPRECIATION_FLOOR = 0.30          # value never falls below this fraction of the "as-new" price
-CLASSIC_AGE_THRESHOLD = 15         # cars at/over this age start to appreciate as classics
-CLASSIC_APPRECIATION_PER_YEAR = 0.03
-
-# Pricing basis is shared with current_listings (see estimate_market_value_gbp) so the
-# most recent historical point lands on today's market average, preventing a
-# discontinuous jump between the historical line and the forecast.
+# Upper bound on the number of historical points generated, guarding against
+# absurd inputs (e.g. a year of 1900). Catalogued cars never reach this cap, so
+# the chart still spans the entire life of the car since its model year.
+MAX_HISTORY_YEARS = 80
 
 # UK inflation rate (approximate annual average): 2.5%
 ANNUAL_INFLATION_RATE = 0.025
+
+# Pricing basis is shared with current_listings (see estimate_market_value_gbp
+# and age_value_factor) so the most recent historical point lands on today's
+# market average, preventing a discontinuous jump between the historical line
+# and the forecast.
 
 
 def _stable_seed(*parts: object) -> int:
@@ -33,21 +33,7 @@ def _stable_seed(*parts: object) -> int:
 
 def _current_market_value(brand: str, model: str, year: int, current_year: int) -> float:
     """Today's market value, using the exact same basis as current_listings."""
-    return max(MIN_PRICE_FLOOR_USD, estimate_market_value_gbp(brand, model, year))
-
-
-def _age_value_factor(age: int) -> float:
-    """Relative value of a vehicle at a given age (age 0 == as-new == 1.0).
-
-    Vehicles depreciate towards a floor; once they reach classic age they
-    gently appreciate again.
-    """
-    if age <= 0:
-        return 1.0
-    value_factor = DEPRECIATION_FLOOR + (1.0 - DEPRECIATION_FLOOR) * (ANNUAL_DEPRECIATION_FACTOR ** age)
-    if age >= CLASSIC_AGE_THRESHOLD:
-        value_factor *= 1.0 + (age - CLASSIC_AGE_THRESHOLD) * CLASSIC_APPRECIATION_PER_YEAR
-    return value_factor
+    return max(MIN_PRICE_FLOOR_GBP, estimate_market_value_gbp(brand, model, year))
 
 
 def _inflation_adjustment(year: int, base_year: int) -> float:
@@ -65,23 +51,26 @@ def get_historical_prices(brand: str, model: str, year: int) -> list[PricePoint]
     rng = random.Random(seed)
     current_year = datetime.now(timezone.utc).year
 
-    # Fixed 20-year window ending at the current year.
-    start_year = current_year - HISTORY_WINDOW_YEARS + 1
+    # Span the entire life of the car: from its model year through to today,
+    # rather than a fixed trailing window. Clamp so we never start after the
+    # current year and never exceed the safety cap for extreme inputs.
+    model_year = min(year, current_year)
+    start_year = max(model_year, current_year - MAX_HISTORY_YEARS + 1)
 
     # Anchor: today's value, then derive an implied "as-new" price so the arc
     # passes through the current market value at the current year.
     anchor_value = _current_market_value(brand, model, year, current_year)
-    age_now = max(0, current_year - min(year, current_year))
-    as_new_price = anchor_value / _age_value_factor(age_now)
+    age_now = max(0, current_year - model_year)
+    as_new_price = anchor_value / age_value_factor(age_now)
 
     data: list[PricePoint] = []
     for yr in range(start_year, current_year + 1):
-        age_in_year = yr - year  # negative before the car existed -> treated as as-new
-        base_value = as_new_price * _age_value_factor(age_in_year)
+        age_in_year = max(0, yr - year)
+        base_value = as_new_price * age_value_factor(age_in_year)
 
         # Small deterministic market noise for a believable, non-robotic line.
         market_noise = 1.0 + rng.uniform(-0.02, 0.02)
-        nominal_price = max(MIN_PRICE_FLOOR_USD, base_value * market_noise)
+        nominal_price = max(MIN_PRICE_FLOOR_GBP, base_value * market_noise)
 
         inflation_factor = _inflation_adjustment(yr, current_year)
         inflation_adjusted_price = nominal_price * inflation_factor

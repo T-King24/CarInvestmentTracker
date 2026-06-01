@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from car_investment_tracker.constants import MIN_PRICE_FLOOR_USD
+from car_investment_tracker.constants import MIN_PRICE_FLOOR_GBP
 from car_investment_tracker.models import PredictionPoint, PredictionExplanation
 
 NEUTRAL_SENTIMENT = 2.5
@@ -78,7 +78,7 @@ def predict_prices(
         # Clamp predicted price to realistic bounds relative to baseline (±35%-30%)
         min_bound = baseline_reference * MIN_PRICE_MULTIPLIER
         max_bound = baseline_reference * MAX_PRICE_MULTIPLIER
-        predicted = max(MIN_PRICE_FLOOR_USD, min(max_bound, max(min_bound, blended)))
+        predicted = max(MIN_PRICE_FLOOR_GBP, min(max_bound, max(min_bound, blended)))
         
         # Calculate confidence intervals
         lower_ci = predicted * (1 - CI_MARGIN)
