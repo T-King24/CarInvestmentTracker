@@ -230,16 +230,18 @@ def market_comparables(
     year: int = Query(ge=1900),
     variant: str | None = Query(default=None),
 ):
-    """Get recent comparable sales for the vehicle."""
+    """Get recent comparable *sold* transactions for the vehicle.
+
+    Returns an empty list when the provider exposes no real sold transactions,
+    rather than fabricating comparable sales.
+    """
     _validate_vehicle_params(brand, model, year)
     comparables = get_market_comparables(brand, model, year, variant)
-    
-    if not comparables:
-        raise HTTPException(status_code=404, detail="No comparable sales found")
-    
+
     return {
         "comparables": comparables,
-        "query": {"brand": brand, "model": model, "year": year},
+        "available": bool(comparables),
+        "query": {"brand": brand, "model": model, "year": year, "variant": variant},
     }
 
 

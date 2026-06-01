@@ -23,6 +23,11 @@ class TTLCache:
         self._store: dict[tuple[Any, ...], tuple[float, Any]] = {}
         self._lock = Lock()
 
+    def clear(self) -> None:
+        """Remove all cached entries (used by tests to isolate providers)."""
+        with self._lock:
+            self._store.clear()
+
     def cached(self, fn: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
