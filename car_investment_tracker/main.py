@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from car_investment_tracker.car_data import get_makes, get_models, get_years
 from car_investment_tracker.services.current_listings import get_current_listings
 from car_investment_tracker.services.historical_data import get_historical_prices
 from car_investment_tracker.services.listing_evaluation import find_undervalued_listings
@@ -49,7 +50,29 @@ def index() -> FileResponse:
     return FileResponse(static_dir / "index.html")
 
 
-@app.get("/historical-prices")
+@app.get("/dropdown-makes")
+def dropdown_makes() -> list[str]:
+    """Get all available car makes for dropdown selection."""
+    return get_makes()
+
+
+@app.get("/dropdown-models")
+def dropdown_models(make: str = Query(min_length=1)) -> list[str]:
+    """Get all available models for a given make."""
+    models = get_models(make)
+    if not models:
+        raise HTTPException(status_code=404, detail=f"No models found for make: {make}")
+    return models
+
+
+@app.get("/dropdown-years")
+def dropdown_years(make: str = Query(min_length=1), model: str = Query(min_length=1)) -> list[int]:
+    """Get all available years for a given make and model."""
+    years = get_years(make, model)
+    if not years:
+        raise HTTPException(status_code=404, detail=f"No years found for {make} {model}")
+    return years
+
 def historical_prices(
     brand: str = Query(min_length=1),
     model: str = Query(min_length=1),

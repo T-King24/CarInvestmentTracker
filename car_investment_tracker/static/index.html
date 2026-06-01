@@ -38,12 +38,19 @@
         box-shadow: 0 8px 22px rgba(0, 0, 0, 0.25);
       }
       label { font-weight: 600; font-size: 0.9rem; color: #d7dde7; }
-      input, button {
+      input, select, button {
         width: 100%;
         padding: 0.7rem 0.75rem;
         margin-top: 0.45rem;
         border-radius: 10px;
         border: 1px solid var(--border);
+        background: #11151b;
+        color: var(--text);
+      }
+      select {
+        cursor: pointer;
+      }
+      select option {
         background: #11151b;
         color: var(--text);
       }
@@ -147,15 +154,15 @@
       <div class="topbar">
         <div>
           <h1>Investment Car Tracker</h1>
-          <p class="small">Track 20-year value movement (inflation-adjusted), forecast future pricing, and spot undervalued listings.</p>
+          <p class="small">Track value movement from the model year onwards (inflation-adjusted), forecast future pricing, and spot undervalued listings.</p>
         </div>
       </div>
 
       <div class="card">
         <div class="grid">
-          <label>Brand <input id="brand" value="Porsche" aria-label="Brand" /></label>
-          <label>Model <input id="model" value="911" aria-label="Model" /></label>
-          <label>Year <input id="year" type="number" value="2004" aria-label="Year" /></label>
+          <label>Make <select id="brand" aria-label="Make"><option value="">Select a make...</option></select></label>
+          <label>Model <select id="model" aria-label="Model"><option value="">Select a model...</option></select></label>
+          <label>Year <select id="year" aria-label="Year"><option value="">Select a year...</option></select></label>
         </div>
         <div class="actions">
           <button id="analyze"><span id="analyzeSpinner" class="loading-spinner" style="display: none;"></span>Run Analysis</button>
@@ -167,6 +174,146 @@
       </div>
 
       <div class="card"><canvas id="trendChart" aria-label="Historical and predicted prices"></canvas></div>
+
+      <div id="explanationContainer"></div>
+
+      <!-- High-Value Feature Panels -->
+      <div class="card">
+        <h2>📊 Sentiment Breakdown</h2>
+        <div id="sentimentBreakdownContainer" style="display: none;">
+          <table style="width: 100%;">
+            <tr><td><strong>Forums</strong></td><td id="sentimentForums"></td><td id="sentimentForumsMentions"></td></tr>
+            <tr><td><strong>Auction Commentary</strong></td><td id="sentimentAuctions"></td><td id="sentimentAuctionsMentions"></td></tr>
+            <tr><td><strong>News Articles</strong></td><td id="sentimentNews"></td><td id="sentimentNewsMentions"></td></tr>
+            <tr><td><strong>Social Media</strong></td><td id="sentimentSocial"></td><td id="sentimentSocialMentions"></td></tr>
+          </table>
+        </div>
+        <div id="sentimentBreakdownPlaceholder">No sentiment breakdown data available.</div>
+      </div>
+
+      <div class="card">
+        <h2>🏆 Market Comparables</h2>
+        <div id="marketComparablesContainer" style="display: none;">
+          <table style="width: 100%;">
+            <thead>
+              <tr><th>Model</th><th>Year</th><th>Price (GBP)</th><th>Mileage</th></tr>
+            </thead>
+            <tbody id="comparablesTableBody"></tbody>
+          </table>
+        </div>
+        <div id="comparablesPlaceholder">No comparable data available.</div>
+      </div>
+
+      <div class="card">
+        <h2>📈 Market Metrics & Volatility</h2>
+        <div id="volatilityContainer" style="display: none;">
+          <div class="grid">
+            <div class="explanation-item">
+              <div class="explanation-item-label">Volatility Index</div>
+              <div id="volatilityIndex"></div>
+            </div>
+            <div class="explanation-item">
+              <div class="explanation-item-label">Price Range</div>
+              <div id="priceRange"></div>
+            </div>
+            <div class="explanation-item">
+              <div class="explanation-item-label">Market Stability</div>
+              <div id="marketStability"></div>
+            </div>
+          </div>
+        </div>
+        <div id="volatilityPlaceholder">No volatility data available.</div>
+      </div>
+
+      <div class="card">
+        <h2>⚙️ Spec-Adjusted Valuation</h2>
+        <div id="specAdjustmentsContainer" style="display: none;">
+          <table style="width: 100%;">
+            <tr><td><strong>Transmission</strong></td><td id="specTransmission"></td></tr>
+            <tr><td><strong>Trim Level</strong></td><td id="specTrim"></td></tr>
+            <tr><td><strong>Condition</strong></td><td id="specCondition"></td></tr>
+            <tr><td><strong>Mileage Bracket</strong></td><td id="specMileage"></td></tr>
+            <tr><td><strong>Base Price Adjustment</strong></td><td id="specAdjustment"></td></tr>
+          </table>
+        </div>
+        <div id="specPlaceholder">No spec adjustment data available.</div>
+      </div>
+
+      <div class="card">
+        <h2>🚨 Listing Anomalies Detected</h2>
+        <div id="anomaliesContainer" style="display: none;">
+          <table style="width: 100%;">
+            <thead>
+              <tr><th>Type</th><th>Count</th><th>Severity</th></tr>
+            </thead>
+            <tbody id="anomaliesTableBody"></tbody>
+          </table>
+        </div>
+        <div id="anomaliesPlaceholder">No anomalies detected in listings.</div>
+      </div>
+
+      <div class="card">
+        <h2>📅 Market Events & Milestones</h2>
+        <div id="marketEventsContainer" style="display: none;">
+          <table style="width: 100%;">
+            <thead>
+              <tr><th>Year</th><th>Event</th><th>Impact</th></tr>
+            </thead>
+            <tbody id="eventsTableBody"></tbody>
+          </table>
+        </div>
+        <div id="eventsPlaceholder">No market events found.</div>
+      </div>
+
+      <div class="card">
+        <h2>🎯 Long-Term Rarity Projection</h2>
+        <div id="rarityProjectionContainer" style="display: none;">
+          <div class="grid">
+            <div class="explanation-item">
+              <div class="explanation-item-label">Production Numbers</div>
+              <div id="rarityProduction"></div>
+            </div>
+            <div class="explanation-item">
+              <div class="explanation-item-label">Estimated Survival Rate</div>
+              <div id="raritySurvivalRate"></div>
+            </div>
+            <div class="explanation-item">
+              <div class="explanation-item-label">Projected Rarity in 10 Years</div>
+              <div id="rarityProjection10y"></div>
+            </div>
+            <div class="explanation-item">
+              <div class="explanation-item-label">Investment Potential</div>
+              <div id="rarityInvestmentPotential"></div>
+            </div>
+          </div>
+        </div>
+        <div id="rarityPlaceholder">No rarity data available.</div>
+      </div>
+
+      <div class="card">
+        <h2>🌍 Macro-Economic Context</h2>
+        <div id="macroEconomicContainer" style="display: none;">
+          <div class="grid">
+            <div class="explanation-item">
+              <div class="explanation-item-label">Interest Rates</div>
+              <div id="macroInterestRates"></div>
+            </div>
+            <div class="explanation-item">
+              <div class="explanation-item-label">Inflation Trend</div>
+              <div id="macroInflationTrend"></div>
+            </div>
+            <div class="explanation-item">
+              <div class="explanation-item-label">Economic Outlook</div>
+              <div id="macroOutlook"></div>
+            </div>
+            <div class="explanation-item">
+              <div class="explanation-item-label">Price Adjustment Factor</div>
+              <div id="macroAdjustmentFactor"></div>
+            </div>
+          </div>
+        </div>
+        <div id="macroPlaceholder">No macro-economic data available.</div>
+      </div>
 
       <div id="explanationContainer"></div>
 
@@ -198,7 +345,94 @@
         return String(text).replace(/[&<>"']/g, m => map[m]);
       }
 
-      function validateInputs() {
+      // Initialize dropdowns on page load
+      async function initializeDropdowns() {
+        await populateMakesDropdown();
+        // Set default selection and populate other dropdowns
+        document.getElementById('brand').value = 'Porsche';
+        await populateModelsDropdown();
+        document.getElementById('model').value = '911';
+        await populateYearsDropdown();
+        document.getElementById('year').value = '2004';
+        // Run initial analysis with defaults
+        runAnalysis();
+      }
+
+      async function populateMakesDropdown() {
+        try {
+          const response = await fetch('/dropdown-makes');
+          if (!response.ok) throw new Error('Failed to fetch makes');
+          const makes = await response.json();
+          const select = document.getElementById('brand');
+          select.innerHTML = '<option value="">Select a make...</option>';
+          makes.forEach(make => {
+            const option = document.createElement('option');
+            option.value = make;
+            option.textContent = make;
+            select.appendChild(option);
+          });
+        } catch (error) {
+          console.error('Error populating makes:', error);
+        }
+      }
+
+      async function populateModelsDropdown() {
+        const brand = document.getElementById('brand').value;
+        const modelSelect = document.getElementById('model');
+        const yearSelect = document.getElementById('year');
+        
+        modelSelect.innerHTML = '<option value="">Select a model...</option>';
+        yearSelect.innerHTML = '<option value="">Select a year...</option>';
+        
+        if (!brand) return;
+        
+        try {
+          const response = await fetch(`/dropdown-models?make=${encodeURIComponent(brand)}`);
+          if (!response.ok) throw new Error('Failed to fetch models');
+          const models = await response.json();
+          models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model;
+            option.textContent = model;
+            modelSelect.appendChild(option);
+          });
+        } catch (error) {
+          console.error('Error populating models:', error);
+        }
+      }
+
+      async function populateYearsDropdown() {
+        const brand = document.getElementById('brand').value;
+        const model = document.getElementById('model').value;
+        const yearSelect = document.getElementById('year');
+        
+        yearSelect.innerHTML = '<option value="">Select a year...</option>';
+        
+        if (!brand || !model) return;
+        
+        try {
+          const response = await fetch(
+            `/dropdown-years?make=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`
+          );
+          if (!response.ok) throw new Error('Failed to fetch years');
+          const years = await response.json();
+          // Sort in descending order (newest first)
+          years.sort((a, b) => b - a);
+          years.forEach(year => {
+            const option = document.createElement('option');
+            option.value = year;
+            option.textContent = year;
+            yearSelect.appendChild(option);
+          });
+        } catch (error) {
+          console.error('Error populating years:', error);
+        }
+      }
+
+      // Event listeners for cascading dropdowns
+      document.getElementById('brand').addEventListener('change', populateModelsDropdown);
+      document.getElementById('model').addEventListener('change', populateYearsDropdown);
+
         const brand = document.getElementById('brand').value.trim();
         const model = document.getElementById('model').value.trim();
         const year = document.getElementById('year').value;
@@ -208,18 +442,18 @@
         errorDiv.textContent = '';
 
         if (!brand) {
-          errorDiv.textContent = 'Please enter a valid brand.';
+          errorDiv.textContent = 'Please select a make.';
           errorDiv.classList.add('show');
           return false;
         }
         if (!model) {
-          errorDiv.textContent = 'Please enter a valid model.';
+          errorDiv.textContent = 'Please select a model.';
           errorDiv.classList.add('show');
           return false;
         }
         const yearNum = parseInt(year);
         if (!year || yearNum < 1900 || yearNum > 2026) {
-          errorDiv.textContent = 'Please enter a year between 1900 and 2026.';
+          errorDiv.textContent = 'Please select a year between 1900 and 2026.';
           errorDiv.classList.add('show');
           return false;
         }
@@ -254,6 +488,111 @@
 
           latestPayload = await response.json();
           document.getElementById('sentiment').textContent = `Sentiment Score: ${latestPayload.sentiment.score}/5 (${latestPayload.sentiment.mentions_analyzed} mentions analyzed)`;
+
+          // Populate Sentiment Breakdown Panel
+          if (latestPayload.sentiment_breakdown) {
+            const sb = latestPayload.sentiment_breakdown;
+            document.getElementById('sentimentForums').textContent = `${sb.forums_score}/5`;
+            document.getElementById('sentimentForumsMentions').textContent = `(${sb.forums_mentions} mentions)`;
+            document.getElementById('sentimentAuctions').textContent = `${sb.auction_score}/5`;
+            document.getElementById('sentimentAuctionsMentions').textContent = `(${sb.auction_mentions} mentions)`;
+            document.getElementById('sentimentNews').textContent = `${sb.news_score}/5`;
+            document.getElementById('sentimentNewsMentions').textContent = `(${sb.news_mentions} mentions)`;
+            document.getElementById('sentimentSocial').textContent = `${sb.social_score}/5`;
+            document.getElementById('sentimentSocialMentions').textContent = `(${sb.social_mentions} mentions)`;
+            document.getElementById('sentimentBreakdownContainer').style.display = 'block';
+            document.getElementById('sentimentBreakdownPlaceholder').style.display = 'none';
+          }
+
+          // Populate Market Comparables Panel
+          if (latestPayload.market_comparables && latestPayload.market_comparables.length > 0) {
+            const comparablesRows = latestPayload.market_comparables.slice(0, 5).map(item => 
+              `<tr>
+                <td>${escapeHtml(item.model || 'N/A')}</td>
+                <td>${item.year || 'N/A'}</td>
+                <td>${formatPrice(item.price || 0, 'GBP')}</td>
+                <td>${item.mileage ? item.mileage.toLocaleString() + ' miles' : 'N/A'}</td>
+              </tr>`
+            );
+            document.getElementById('comparablesTableBody').innerHTML = comparablesRows.join('');
+            document.getElementById('marketComparablesContainer').style.display = 'block';
+            document.getElementById('comparablesPlaceholder').style.display = 'none';
+          }
+
+          // Populate Volatility Panel
+          if (latestPayload.volatility_metrics) {
+            const vm = latestPayload.volatility_metrics;
+            const volatilityScore = vm.volatility_score || 5;
+            const stability = volatilityScore <= 3 ? '✓ Low - Stable Market' : volatilityScore <= 6 ? '~ Moderate - Some Volatility' : '⚠ High - Volatile Market';
+            document.getElementById('volatilityIndex').textContent = `${volatilityScore}/10`;
+            document.getElementById('priceRange').textContent = `£${formatPrice(vm.price_min || 0, 'GBP')} - £${formatPrice(vm.price_max || 0, 'GBP')}`;
+            document.getElementById('marketStability').textContent = stability;
+            document.getElementById('volatilityContainer').style.display = 'block';
+            document.getElementById('volatilityPlaceholder').style.display = 'none';
+          }
+
+          // Populate Spec Adjustments Panel
+          if (latestPayload.spec_adjustments) {
+            const sa = latestPayload.spec_adjustments;
+            document.getElementById('specTransmission').textContent = sa.transmission_adjustment ? `${(sa.transmission_adjustment * 100).toFixed(1)}% adjustment` : 'Standard';
+            document.getElementById('specTrim').textContent = sa.trim_adjustment ? `${(sa.trim_adjustment * 100).toFixed(1)}% adjustment` : 'Standard';
+            document.getElementById('specCondition').textContent = sa.condition_adjustment ? `${(sa.condition_adjustment * 100).toFixed(1)}% adjustment` : 'Average';
+            document.getElementById('specMileage').textContent = sa.mileage_adjustment ? `${(sa.mileage_adjustment * 100).toFixed(1)}% adjustment` : 'Normal';
+            const totalAdjustment = (sa.transmission_adjustment || 0) + (sa.trim_adjustment || 0) + (sa.condition_adjustment || 0) + (sa.mileage_adjustment || 0);
+            document.getElementById('specAdjustment').textContent = `${(totalAdjustment * 100).toFixed(1)}% total`;
+            document.getElementById('specAdjustmentsContainer').style.display = 'block';
+            document.getElementById('specPlaceholder').style.display = 'none';
+          }
+
+          // Populate Anomalies Panel
+          if (latestPayload.listing_anomalies && latestPayload.listing_anomalies.length > 0) {
+            const anomalyRows = latestPayload.listing_anomalies.map(item => 
+              `<tr>
+                <td>${escapeHtml(item.anomaly_type || 'Unknown')}</td>
+                <td>${item.count || 0}</td>
+                <td>${item.severity || 'Medium'}</td>
+              </tr>`
+            );
+            document.getElementById('anomaliesTableBody').innerHTML = anomalyRows.join('');
+            document.getElementById('anomaliesContainer').style.display = 'block';
+            document.getElementById('anomaliesPlaceholder').style.display = 'none';
+          }
+
+          // Populate Market Events Panel
+          if (latestPayload.market_events && latestPayload.market_events.length > 0) {
+            const eventRows = latestPayload.market_events.map(item => 
+              `<tr>
+                <td>${item.year || 'Unknown'}</td>
+                <td>${escapeHtml(item.event_name || 'Market event')}</td>
+                <td>${escapeHtml(item.impact_direction || 'Neutral')} ${item.impact_magnitude ? `(${item.impact_magnitude})` : ''}</td>
+              </tr>`
+            );
+            document.getElementById('eventsTableBody').innerHTML = eventRows.join('');
+            document.getElementById('marketEventsContainer').style.display = 'block';
+            document.getElementById('eventsPlaceholder').style.display = 'none';
+          }
+
+          // Populate Rarity Projection Panel
+          if (latestPayload.rarity_projection) {
+            const rp = latestPayload.rarity_projection;
+            document.getElementById('rarityProduction').textContent = rp.production_numbers ? `${rp.production_numbers.toLocaleString()} units` : 'Unknown';
+            document.getElementById('raritySurvivalRate').textContent = rp.survival_rate ? `${(rp.survival_rate * 100).toFixed(1)}%` : 'Unknown';
+            document.getElementById('rarityProjection10y').textContent = rp.rarity_score_in_10_years ? `${rp.rarity_score_in_10_years}/10` : 'Unknown';
+            document.getElementById('rarityInvestmentPotential').textContent = rp.investment_potential || 'Unknown';
+            document.getElementById('rarityProjectionContainer').style.display = 'block';
+            document.getElementById('rarityPlaceholder').style.display = 'none';
+          }
+
+          // Populate Macro-Economic Context Panel
+          if (latestPayload.macro_economic_context) {
+            const macro = latestPayload.macro_economic_context;
+            document.getElementById('macroInterestRates').textContent = macro.interest_rates || 'Stable';
+            document.getElementById('macroInflationTrend').textContent = macro.inflation_trend || 'Moderate';
+            document.getElementById('macroOutlook').textContent = macro.economic_outlook || 'Neutral';
+            document.getElementById('macroAdjustmentFactor').textContent = macro.adjustment_factor ? `${(macro.adjustment_factor * 100).toFixed(1)}%` : 'N/A';
+            document.getElementById('macroEconomicContainer').style.display = 'block';
+            document.getElementById('macroPlaceholder').style.display = 'none';
+          }
 
           const tooltip = document.getElementById('tooltip');
           const rows = latestPayload.undervalued_listings.map(item => {
@@ -360,6 +699,19 @@
             ...predictionPoints.map(p => p.predicted_price)
           ];
 
+          // Create confidence interval bounds
+          const lowerBoundSeries = [
+            ...new Array(overlapOffset).fill(null),
+            historicalPoints.length ? historicalPoints[historicalPoints.length - 1].average_price : null,
+            ...predictionPoints.map(p => p.lower_bound || p.predicted_price * 0.9)
+          ];
+          
+          const upperBoundSeries = [
+            ...new Array(overlapOffset).fill(null),
+            historicalPoints.length ? historicalPoints[historicalPoints.length - 1].average_price : null,
+            ...predictionPoints.map(p => p.upper_bound || p.predicted_price * 1.1)
+          ];
+
           // Create average line data (horizontal line at current listing average)
           const averageSeries = currentListingAverage > 0 ? new Array(labels.length).fill(currentListingAverage) : [];
 
@@ -389,6 +741,30 @@
                   borderDash: [8, 6],
                   borderWidth: 2.5,
                   spanGaps: true
+                },
+                {
+                  label: 'Confidence Upper Bound (+10%)',
+                  data: upperBoundSeries,
+                  borderColor: 'rgba(245, 158, 11, 0.3)',
+                  backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                  tension: 0.2,
+                  pointRadius: 0,
+                  borderDash: [3, 3],
+                  borderWidth: 1,
+                  spanGaps: true,
+                  fill: false
+                },
+                {
+                  label: 'Confidence Lower Bound (-10%)',
+                  data: lowerBoundSeries,
+                  borderColor: 'rgba(245, 158, 11, 0.3)',
+                  backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                  tension: 0.2,
+                  pointRadius: 0,
+                  borderDash: [3, 3],
+                  borderWidth: 1,
+                  spanGaps: true,
+                  fill: false
                 },
                 ...(currentListingAverage > 0 ? [{
                   label: 'Current Market Average (Baseline for Comparison)',
@@ -608,7 +984,8 @@
         URL.revokeObjectURL(url);
       });
 
-      runAnalysis();
+      // Initialize dropdowns when page loads
+      window.addEventListener('DOMContentLoaded', initializeDropdowns);
     </script>
   </body>
 </html>
