@@ -433,6 +433,7 @@
       document.getElementById('brand').addEventListener('change', populateModelsDropdown);
       document.getElementById('model').addEventListener('change', populateYearsDropdown);
 
+      function validateInputs() {
         const brand = document.getElementById('brand').value.trim();
         const model = document.getElementById('model').value.trim();
         const year = document.getElementById('year').value;

@@ -70,8 +70,10 @@ def predict_prices(
     CI_MARGIN = 0.10
     
     for year in range(current_year + 1, current_year + horizon_years + 1):
-        # Use smoothed slope for more realistic forecasting
-        baseline = smoothed_slope * year + intercept
+        # Anchor the forecast to the last actual historical price and extend it by the
+        # smoothed slope so the prediction continues smoothly instead of jumping.
+        years_ahead = year - current_year
+        baseline = last_historical_price + smoothed_slope * years_ahead
         blended = (baseline * HISTORICAL_WEIGHT + listing_avg * LISTING_WEIGHT) * sentiment_modifier
         # Clamp predicted price to realistic bounds relative to baseline (±35%-30%)
         min_bound = baseline_reference * MIN_PRICE_MULTIPLIER
