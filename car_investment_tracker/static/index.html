@@ -265,6 +265,56 @@
         <div id="eventsPlaceholder">No market events found.</div>
       </div>
 
+      <div class="card">
+        <h2>🎯 Long-Term Rarity Projection</h2>
+        <div id="rarityProjectionContainer" style="display: none;">
+          <div class="grid">
+            <div class="explanation-item">
+              <div class="explanation-item-label">Production Numbers</div>
+              <div id="rarityProduction"></div>
+            </div>
+            <div class="explanation-item">
+              <div class="explanation-item-label">Estimated Survival Rate</div>
+              <div id="raritySurvivalRate"></div>
+            </div>
+            <div class="explanation-item">
+              <div class="explanation-item-label">Projected Rarity in 10 Years</div>
+              <div id="rarityProjection10y"></div>
+            </div>
+            <div class="explanation-item">
+              <div class="explanation-item-label">Investment Potential</div>
+              <div id="rarityInvestmentPotential"></div>
+            </div>
+          </div>
+        </div>
+        <div id="rarityPlaceholder">No rarity data available.</div>
+      </div>
+
+      <div class="card">
+        <h2>🌍 Macro-Economic Context</h2>
+        <div id="macroEconomicContainer" style="display: none;">
+          <div class="grid">
+            <div class="explanation-item">
+              <div class="explanation-item-label">Interest Rates</div>
+              <div id="macroInterestRates"></div>
+            </div>
+            <div class="explanation-item">
+              <div class="explanation-item-label">Inflation Trend</div>
+              <div id="macroInflationTrend"></div>
+            </div>
+            <div class="explanation-item">
+              <div class="explanation-item-label">Economic Outlook</div>
+              <div id="macroOutlook"></div>
+            </div>
+            <div class="explanation-item">
+              <div class="explanation-item-label">Price Adjustment Factor</div>
+              <div id="macroAdjustmentFactor"></div>
+            </div>
+          </div>
+        </div>
+        <div id="macroPlaceholder">No macro-economic data available.</div>
+      </div>
+
       <div id="explanationContainer"></div>
 
       <div class="card">
@@ -520,6 +570,28 @@
             document.getElementById('eventsTableBody').innerHTML = eventRows.join('');
             document.getElementById('marketEventsContainer').style.display = 'block';
             document.getElementById('eventsPlaceholder').style.display = 'none';
+          }
+
+          // Populate Rarity Projection Panel
+          if (latestPayload.rarity_projection) {
+            const rp = latestPayload.rarity_projection;
+            document.getElementById('rarityProduction').textContent = rp.production_numbers ? `${rp.production_numbers.toLocaleString()} units` : 'Unknown';
+            document.getElementById('raritySurvivalRate').textContent = rp.survival_rate ? `${(rp.survival_rate * 100).toFixed(1)}%` : 'Unknown';
+            document.getElementById('rarityProjection10y').textContent = rp.rarity_score_in_10_years ? `${rp.rarity_score_in_10_years}/10` : 'Unknown';
+            document.getElementById('rarityInvestmentPotential').textContent = rp.investment_potential || 'Unknown';
+            document.getElementById('rarityProjectionContainer').style.display = 'block';
+            document.getElementById('rarityPlaceholder').style.display = 'none';
+          }
+
+          // Populate Macro-Economic Context Panel
+          if (latestPayload.macro_economic_context) {
+            const macro = latestPayload.macro_economic_context;
+            document.getElementById('macroInterestRates').textContent = macro.interest_rates || 'Stable';
+            document.getElementById('macroInflationTrend').textContent = macro.inflation_trend || 'Moderate';
+            document.getElementById('macroOutlook').textContent = macro.economic_outlook || 'Neutral';
+            document.getElementById('macroAdjustmentFactor').textContent = macro.adjustment_factor ? `${(macro.adjustment_factor * 100).toFixed(1)}%` : 'N/A';
+            document.getElementById('macroEconomicContainer').style.display = 'block';
+            document.getElementById('macroPlaceholder').style.display = 'none';
           }
 
           const tooltip = document.getElementById('tooltip');
