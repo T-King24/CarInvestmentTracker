@@ -54,17 +54,26 @@ def _build_source_url(source: str, brand: str, model: str, year: int, listing_in
 
 
 def _estimate_market_price_gbp(brand: str, model: str, year: int, rng: random.Random) -> float:
+    # Keep pricing variation deterministic for the same model while retaining believable spread.
+    random_factor = rng.uniform(0.84, 1.16)
+    return round(estimate_market_value_gbp(brand, model, year) * random_factor, 2)
+
+
+def estimate_market_value_gbp(brand: str, model: str, year: int) -> float:
+    """Deterministic current market value (the mean a listing fluctuates around).
+
+    Exposed so other services (e.g. historical pricing) can anchor to the same
+    market basis and avoid discontinuities between datasets.
+    """
     normalized_year = min(year, CURRENT_YEAR)
     age = CURRENT_YEAR - normalized_year
     depreciation_base = max(2800.0, 38000.0 - (age * 900.0))
     brand_factor = BRAND_PRICE_MULTIPLIERS.get(brand.lower(), 1.0)
-    # Keep pricing variation deterministic for the same model while retaining believable spread.
     model_factor = MODEL_FACTOR_BASE + (
         (_stable_seed("model-factor", model) % MODEL_FACTOR_BUCKETS)
         * MODEL_FACTOR_STEP
     )
-    random_factor = rng.uniform(0.84, 1.16)
-    return round(depreciation_base * brand_factor * model_factor * random_factor, 2)
+    return round(depreciation_base * brand_factor * model_factor, 2)
 
 
 @cache.cached

@@ -73,6 +73,7 @@ def dropdown_years(make: str = Query(min_length=1), model: str = Query(min_lengt
         raise HTTPException(status_code=404, detail=f"No years found for {make} {model}")
     return years
 
+@app.get("/historical-prices")
 def historical_prices(
     brand: str = Query(min_length=1),
     model: str = Query(min_length=1),

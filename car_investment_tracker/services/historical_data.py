@@ -7,33 +7,23 @@ import random
 from car_investment_tracker.constants import MIN_PRICE_FLOOR_USD
 from car_investment_tracker.models import PricePoint
 from car_investment_tracker.services.cache import cache
+from car_investment_tracker.services.current_listings import estimate_market_value_gbp
 
-MIN_DEPRECIATION_RATE = 0.01
-BASE_DEPRECIATION_RATE = 0.085
-MAX_AGE_ADJUSTMENT_YEARS = 20
-AGE_DEPRECIATION_ADJUSTMENT = 0.002
-CLASSIC_AGE_THRESHOLD = 15
-CLASSIC_APPRECIATION_WINDOW_YEARS = 7
-MODEL_FACTOR_BASE = 0.9
-MODEL_FACTOR_BUCKETS = 24
-MODEL_FACTOR_STEP = 0.0125
-TREND_PENALTY_FACTOR = 0.012
-MAX_AGE_FOR_FACTOR = 30
-AGE_FACTOR_MULTIPLIER = 0.015
+# Number of calendar years shown in the historical window (ends at the current year).
+HISTORY_WINDOW_YEARS = 20
+
+# Depreciation/appreciation shape parameters used to build a realistic value arc.
+ANNUAL_DEPRECIATION_FACTOR = 0.90  # value retained per year while the car is depreciating
+DEPRECIATION_FLOOR = 0.30          # value never falls below this fraction of the "as-new" price
+CLASSIC_AGE_THRESHOLD = 15         # cars at/over this age start to appreciate as classics
+CLASSIC_APPRECIATION_PER_YEAR = 0.03
+
+# Pricing basis is shared with current_listings (see estimate_market_value_gbp) so the
+# most recent historical point lands on today's market average, preventing a
+# discontinuous jump between the historical line and the forecast.
 
 # UK inflation rate (approximate annual average): 2.5%
-# Using a conservative estimate for long-term inflation
 ANNUAL_INFLATION_RATE = 0.025
-
-BRAND_VALUE_MULTIPLIERS = {
-    "aston martin": 1.35,
-    "audi": 1.05,
-    "bmw": 1.1,
-    "jaguar": 1.0,
-    "land rover": 1.2,
-    "mercedes": 1.15,
-    "porsche": 1.4,
-}
 
 
 def _stable_seed(*parts: object) -> int:
@@ -41,21 +31,29 @@ def _stable_seed(*parts: object) -> int:
     return int(digest[:16], 16)
 
 
-def _base_market_price(brand: str, model: str, year: int, current_year: int) -> float:
-    age = max(0, current_year - year)
-    brand_factor = BRAND_VALUE_MULTIPLIERS.get(brand.lower(), 1.0)
-    model_factor = MODEL_FACTOR_BASE + (
-        (_stable_seed("model", model) % MODEL_FACTOR_BUCKETS) * MODEL_FACTOR_STEP
-    )
-    age_factor = 1.0 + min(age, MAX_AGE_FOR_FACTOR) * AGE_FACTOR_MULTIPLIER
-    return max(MIN_PRICE_FLOOR_USD, 16000.0 * brand_factor * model_factor * age_factor)
+def _current_market_value(brand: str, model: str, year: int, current_year: int) -> float:
+    """Today's market value, using the exact same basis as current_listings."""
+    return max(MIN_PRICE_FLOOR_USD, estimate_market_value_gbp(brand, model, year))
+
+
+def _age_value_factor(age: int) -> float:
+    """Relative value of a vehicle at a given age (age 0 == as-new == 1.0).
+
+    Vehicles depreciate towards a floor; once they reach classic age they
+    gently appreciate again.
+    """
+    if age <= 0:
+        return 1.0
+    value_factor = DEPRECIATION_FLOOR + (1.0 - DEPRECIATION_FLOOR) * (ANNUAL_DEPRECIATION_FACTOR ** age)
+    if age >= CLASSIC_AGE_THRESHOLD:
+        value_factor *= 1.0 + (age - CLASSIC_AGE_THRESHOLD) * CLASSIC_APPRECIATION_PER_YEAR
+    return value_factor
 
 
 def _inflation_adjustment(year: int, base_year: int) -> float:
-    """Calculate inflation multiplier from year to base_year (current year).
-    
-    Returns the factor by which a price from 'year' should be adjusted to current value.
-    E.g., a £1000 car in 2000 is worth £1000 * adjustment_factor in today's money.
+    """Inflation multiplier converting a price from ``year`` into ``base_year`` money.
+
+    E.g. a £1000 car in 2000 is worth £1000 * adjustment_factor in today's money.
     """
     years_difference = base_year - year
     return (1 + ANNUAL_INFLATION_RATE) ** years_difference
@@ -66,37 +64,31 @@ def get_historical_prices(brand: str, model: str, year: int) -> list[PricePoint]
     seed = _stable_seed("historical", brand, model, year) & 0xFFFFFFFF
     rng = random.Random(seed)
     current_year = datetime.now(timezone.utc).year
-    # Start from the model year instead of 20 years ago
-    start_year = year
 
-    age = max(1, current_year - year)
-    base = _base_market_price(brand, model, year, current_year)
-    depreciation = max(
-        MIN_DEPRECIATION_RATE,
-        BASE_DEPRECIATION_RATE - min(age, MAX_AGE_ADJUSTMENT_YEARS) * AGE_DEPRECIATION_ADJUSTMENT,
-    )
+    # Fixed 20-year window ending at the current year.
+    start_year = current_year - HISTORY_WINDOW_YEARS + 1
+
+    # Anchor: today's value, then derive an implied "as-new" price so the arc
+    # passes through the current market value at the current year.
+    anchor_value = _current_market_value(brand, model, year, current_year)
+    age_now = max(0, current_year - min(year, current_year))
+    as_new_price = anchor_value / _age_value_factor(age_now)
 
     data: list[PricePoint] = []
-    price = float(base)
     for yr in range(start_year, current_year + 1):
-        years_from_now = current_year - yr
-        market_noise = rng.uniform(-0.03, 0.03)
-        in_classic_window = age >= CLASSIC_AGE_THRESHOLD and yr >= current_year - CLASSIC_APPRECIATION_WINDOW_YEARS
-        collector_bump = 0.018 if in_classic_window else 0.0
-        trend_penalty = depreciation * (1 + (years_from_now * TREND_PENALTY_FACTOR))
-        growth = collector_bump - trend_penalty + market_noise
-        price = max(MIN_PRICE_FLOOR_USD, price * (1 + growth))
-        
-        # Store nominal price (not adjusted)
-        nominal_price = price
-        
-        # Adjust price for inflation: show what nominal price was in current year terms
+        age_in_year = yr - year  # negative before the car existed -> treated as as-new
+        base_value = as_new_price * _age_value_factor(age_in_year)
+
+        # Small deterministic market noise for a believable, non-robotic line.
+        market_noise = 1.0 + rng.uniform(-0.02, 0.02)
+        nominal_price = max(MIN_PRICE_FLOOR_USD, base_value * market_noise)
+
         inflation_factor = _inflation_adjustment(yr, current_year)
-        inflation_adjusted_price = price * inflation_factor
-        
+        inflation_adjusted_price = nominal_price * inflation_factor
+
         data.append(PricePoint(
-            year=yr, 
-            average_price=round(inflation_adjusted_price, 2),
+            year=yr,
+            average_price=round(nominal_price, 2),
             nominal_price=round(nominal_price, 2),
             inflation_adjusted_price=round(inflation_adjusted_price, 2),
         ))
