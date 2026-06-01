@@ -14,16 +14,19 @@ class ProviderConfig:
     internal aggregation service.
     """
 
-    provider: str  # "live" | "null"
+    provider: str  # "http"/"live" to enable HTTP fetching | "null" (default)
     listings_url: str | None
     historical_url: str | None
     discussions_url: str | None
     api_key: str | None
     timeout_seconds: float
 
+    # Values of CIT_DATA_PROVIDER that enable live HTTP fetching.
+    _LIVE_PROVIDERS = ("http", "live")
+
     @property
     def is_live(self) -> bool:
-        return self.provider == "live" and bool(
+        return self.provider in self._LIVE_PROVIDERS and bool(
             self.listings_url or self.historical_url or self.discussions_url
         )
 
@@ -32,7 +35,7 @@ def load_config() -> ProviderConfig:
     """Load provider configuration from environment variables.
 
     Variables:
-        CIT_DATA_PROVIDER       "live" to enable HTTP fetching, otherwise null
+        CIT_DATA_PROVIDER       "http" (alias "live") to enable HTTP fetching, otherwise null
         CIT_LISTINGS_API_URL    endpoint returning live adverts
         CIT_HISTORICAL_API_URL  endpoint returning sold-price history
         CIT_DISCUSSIONS_API_URL endpoint returning news/forum discussions
