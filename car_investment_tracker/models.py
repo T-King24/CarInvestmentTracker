@@ -62,6 +62,9 @@ class PredictionExplanation(BaseModel):
     trend_momentum: float = Field(description="Recent price change momentum (noise-smoothed)")
     model_type: str = Field(description="Forecasting approach used")
     inflation_adjusted: bool = Field(description="Whether historical prices are inflation-adjusted")
+    outlook: str = Field(default="", description="Plain-English direction: depreciate, stabilise or appreciate")
+    outlook_summary: str = Field(default="", description="Short plain-English explanation of the forecast")
+    driven_by_history: bool = Field(default=False, description="True when the forecast is led by the historical price trend rather than sentiment")
 
 
 class VolatilityMetrics(BaseModel):

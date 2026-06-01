@@ -67,6 +67,63 @@ def test_current_listings_use_uk_currency_and_working_links():
         assert "example.com" not in item["url"]
 
 
+def test_listing_links_point_to_marketplace_search_results():
+    """Links should resolve to real marketplace search pages (not fake detail IDs)."""
+    response = client.get("/current-listings", params=_query_params())
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload
+
+    allowed_hosts = (
+        "https://www.autotrader.co.uk/car-search",
+        "https://www.motors.co.uk/search/car/",
+        "https://www.ebay.co.uk/sch/",
+        "https://www.pistonheads.com/classifieds",
+    )
+    for item in payload:
+        url = item["url"]
+        assert any(url.startswith(prefix) for prefix in allowed_hosts), url
+        # The old fabricated car-detail style links must not return.
+        assert "/car-details/" not in url
+        assert "/buy/listing/" not in url
+        # Search links should carry the make so the user lands on relevant results.
+        assert "911" in url
+
+
+def test_consecutive_depreciation_does_not_forecast_sudden_rise():
+    """A car depreciating for years should not suddenly be forecast to rise.
+
+    Mirrors the Ferrari Roma case: steady decline + weak price sentiment must
+    keep the forecast trending downward rather than spiking upward.
+    """
+    from car_investment_tracker.services.prediction import predict_prices
+
+    declining = [200000, 185000, 170000, 158000, 150000, 145000]
+    listing_avg = 148000
+    weak_sentiment = 1.5  # below neutral -> not bullish
+    forecast, explanation = predict_prices(declining, listing_avg, weak_sentiment)
+
+    assert forecast
+    # No predicted year should exceed the last historical price.
+    last_historical = declining[-1]
+    assert all(p.predicted_price <= last_historical for p in forecast)
+    # Forecast should be non-increasing (no sudden upward jump).
+    prices = [p.predicted_price for p in forecast]
+    assert prices == sorted(prices, reverse=True)
+    assert explanation.driven_by_history is True
+    assert "depreciat" in explanation.outlook.lower()
+
+
+def test_strong_bullish_sentiment_can_lift_forecast():
+    """With strong price-outlook sentiment, a rising car may be forecast upward."""
+    from car_investment_tracker.services.prediction import predict_prices
+
+    rising = [100000, 105000, 112000, 120000, 130000]
+    forecast, explanation = predict_prices(rising, 128000, 4.5)
+    assert forecast
+    assert explanation.outlook
+
+
 def test_inflation_adjustment_increases_past_prices():
     """Test that inflation adjustment makes past prices higher in current value."""
     current_year = 2026

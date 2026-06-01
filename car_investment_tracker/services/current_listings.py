@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 import hashlib
 import random
-from urllib.parse import quote_plus, urlencode
+from urllib.parse import urlencode
 
 from car_investment_tracker.constants import MIN_PRICE_FLOOR_GBP
 from car_investment_tracker.models import Listing
@@ -129,8 +129,6 @@ MODEL_FACTOR_BASE = 0.9
 MODEL_FACTOR_BUCKETS = 25
 MODEL_FACTOR_STEP = 0.01
 CURRENT_YEAR = date.today().year
-LISTING_ID_BASE = 10_000_000
-LISTING_ID_RANGE = 90_000_000
 
 
 def age_value_factor(age: int) -> float:
@@ -155,14 +153,23 @@ def _stable_seed(*parts: object) -> int:
 
 
 def _build_source_url(source: str, brand: str, model: str, year: int, listing_index: int) -> str:
-    query = quote_plus(f"{year} {brand} {model}")
-    listing_id = LISTING_ID_BASE + (_stable_seed(source, brand, model, year, listing_index) % LISTING_ID_RANGE)
+    """Build a reliable marketplace search URL for the given vehicle.
+
+    Earlier versions linked to fabricated car-detail pages (random listing IDs)
+    that resolved to error or "listing removed" pages. Instead we link to each
+    marketplace's public search results, pre-filtered by make, model and year so
+    the user lands on relevant, live listings.
+    """
+    keywords = f"{year} {brand} {model}"
     source_urls: dict[str, str] = {
-        "Auto Trader UK": f"https://www.autotrader.co.uk/car-details/{listing_id}?"
-        + urlencode({"make": brand, "model": model, "year-from": year, "advertising-location": "at_cars"}),
-        "Motors.co.uk": f"https://www.motors.co.uk/car-{listing_id}/{query}/",
-        "eBay Motors UK": f"https://www.ebay.co.uk/itm/{listing_id}?_nkw={query}",
-        "PistonHeads": f"https://www.pistonheads.com/buy/listing/{listing_id}?q={query}",
+        "Auto Trader UK": "https://www.autotrader.co.uk/car-search?"
+        + urlencode({"make": brand, "model": model, "year-from": year, "year-to": year}),
+        "Motors.co.uk": "https://www.motors.co.uk/search/car/?"
+        + urlencode({"make": brand, "model": model, "keywords": keywords}),
+        "eBay Motors UK": "https://www.ebay.co.uk/sch/i.html?"
+        + urlencode({"_nkw": keywords, "_sacat": "9801"}),
+        "PistonHeads": "https://www.pistonheads.com/classifieds?"
+        + urlencode({"Keywords": keywords}),
     }
     return source_urls[source]
 
@@ -224,6 +231,8 @@ def get_current_listings(brand: str, model: str, year: int) -> list[Listing]:
 
     deduped: dict[str, Listing] = {}
     for listing in listings:
-        deduped[str(listing.url)] = listing
+        # Each synthetic listing is unique per (source, title); the URL now points
+        # to the marketplace search results, so it can no longer serve as the key.
+        deduped[f"{listing.source}|{listing.title}"] = listing
 
     return list(deduped.values())
